@@ -74,6 +74,9 @@ def main():
     forecast_dataframe = enrich_forecast(forecast_dataframe)
     forecast_dataframe.to_csv("forecast.csv")
 
+    # keep this script, and thus the container, running to enable inspection
+    input()
+
 
 if __name__ == "__main__":
     main()
