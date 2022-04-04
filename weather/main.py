@@ -10,7 +10,7 @@ import pandas as pd
 
 OPENWEATHER_APIKEY = "c46c557e9993060ab2083ab71d14c510"
 OPENWEATHER_CITY_ID = "2643743"
-FORECAST_PATH = "forecast.json"
+FORECAST_PATH = "weatherdata.json"
 EXPECTED_ROW_COUNT = 40  # five days of eight forecasts per day
 DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
 
