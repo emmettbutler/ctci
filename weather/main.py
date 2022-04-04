@@ -3,7 +3,6 @@ import simplejson as json
 import logging as log
 import os
 import requests
-import time
 
 import pandas as pd
 
@@ -73,7 +72,7 @@ def main():
         log.error("No well-formed weather information could be found")
     forecast_dataframe = make_forecast_dataframe(weather_data)
     forecast_dataframe = enrich_forecast(forecast_dataframe)
-    forecast_dataframe.to_csv(f"forecast_{int(time.time())}.csv")
+    forecast_dataframe.to_csv("forecast.csv")
 
 
 if __name__ == "__main__":
