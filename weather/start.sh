@@ -7,11 +7,11 @@ fi
 
 
 run_test() {
-    py.test
+    py.test test.py
 }
 
 run_local() {
-  python -u main.py
+    python -u main.py
 }
 
 echo -ne "\n\n##\n##\tRUNNING WITH ENVIRONMENT=\"${ENVIRONMENT}\"\n##\n\n"

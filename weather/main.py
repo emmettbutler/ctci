@@ -14,9 +14,10 @@ EXPECTED_ROW_COUNT = 40  # five days of eight forecasts per day
 DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
 
 
-def download_forecast():
-    if os.path.exists(FORECAST_PATH):
-        with open(FORECAST_PATH, "r") as f:
+def load_forecast(data_path=FORECAST_PATH):
+    """Load OpenWeather API response data from a local file or the internet"""
+    if os.path.exists(data_path):
+        with open(data_path, "r") as f:
             forecast = json.loads(f.read())
     else:
         payload = requests.get(
@@ -37,7 +38,7 @@ def download_forecast():
 
 
 def make_forecast_dataframe(weather_data):
-    """Turn weather data from OW API into a specially-formatted forecast dataframe"""
+    """Turn weather data from OpenWeather API into a specially-formatted forecast dataframe"""
     forecast = []
     for day_data in weather_data.get("list", []):
         date = dt.datetime.utcfromtimestamp(day_data.get("dt", 0))
@@ -59,6 +60,7 @@ def make_forecast_dataframe(weather_data):
 
 
 def enrich_forecast(forecast):
+    """Add synthetic columns to dataframe"""
     forecast["dt_minus_1h"] = pd.to_datetime(forecast["dt"]) - pd.to_timedelta(
         1, unit="H"
     )
@@ -67,12 +69,12 @@ def enrich_forecast(forecast):
 
 
 def main():
-    weather_data = download_forecast()
+    weather_data = load_forecast()
     if weather_data is None:
         log.error("No well-formed weather information could be found")
     forecast_dataframe = make_forecast_dataframe(weather_data)
-    forecast_dataframe = enrich_forecast(forecast_dataframe)
-    forecast_dataframe.to_csv("forecast.csv")
+    enriched_dataframe = enrich_forecast(forecast_dataframe)
+    enriched_dataframe.to_csv("forecast.csv")
 
     # keep this script, and thus the container, running to enable inspection
     input()
