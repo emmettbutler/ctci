@@ -19,3 +19,8 @@ Running tests
 
 You can run this project's unit tests with `make test` or by running the commands from that section of the Makefile
 directly.
+
+Notes
+-----
+
+The "referenced later" JSON file from step 1 is `fixture.json`.
