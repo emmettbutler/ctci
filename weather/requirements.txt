@@ -1,4 +1,4 @@
-ipdb
 requests
 pandas
 simplejson
+pytest

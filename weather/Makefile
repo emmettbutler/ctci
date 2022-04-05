@@ -1,5 +1,5 @@
 build:
-		docker build -t weather .
+		docker build -t weather --build-arg environment=dev .
 
 start:
 		docker run -itd weather
@@ -7,3 +7,7 @@ start:
 
 stop:
 		docker container rm -f `docker ps -lq`
+
+test:
+		docker build -t weather-test --build-arg environment=test .
+		docker run weather-test
