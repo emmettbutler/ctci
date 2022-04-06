@@ -1,9 +1,9 @@
 pipeline {
     agent { docker { image 'node:14.19.' } }
     stages {
-        stage('test') {
+        stage('test_unit') {
             steps {
-                sh 'make test'
+                sh 'make tests'
             }
         }
         stage('build') {
@@ -13,7 +13,17 @@ pipeline {
                 sh 'make build'
             }
         }
-        stage('deploy') {
+        stage('deploy_staging') {
+            steps {
+                sh 'node --version'
+            }
+        }
+        stage('test_integration') {
+            steps {
+                sh 'node --version'
+            }
+        }
+        stage('deploy_prod') {
             steps {
                 sh 'node --version'
             }

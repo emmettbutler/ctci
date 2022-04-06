@@ -1,3 +1,4 @@
+# this assumes that the project is in a git repo
 HASH = $(shell git rev-parse --short HEAD)
 TAG = registry.mycoolsite.com:8000/may-$(HASH)
 
