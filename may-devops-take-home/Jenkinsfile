@@ -1,0 +1,22 @@
+pipeline {
+    agent { docker { image 'node:14.19.' } }
+    stages {
+        stage('test') {
+            steps {
+                sh 'make test'
+            }
+        }
+        stage('build') {
+            steps {
+                // this assumes that the Jenkins runner has been configured to allow Docker commands as in
+                // https://blog.container-solutions.com/running-docker-in-jenkins-in-docker#:~:text=Open%20the%20Jenkins%20home%20page,sudo%20docker%20run%20hello%2Dworld%22
+                sh 'make build'
+            }
+        }
+        stage('deploy') {
+            steps {
+                sh 'node --version'
+            }
+        }
+    }
+}
