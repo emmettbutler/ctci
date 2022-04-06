@@ -6,7 +6,7 @@ services:
    context: .
   ports:
    - 3000:3000
-   - 9229:9229
+   - 9229:9229  # open this port to allow connecting a debugger
   environment:
    - SERVER_PORT=3000
   volumes:
