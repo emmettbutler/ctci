@@ -8,6 +8,6 @@ start:
 stop:
 		docker container rm -f `docker ps -lq`
 
-test:
+tests:
 		docker build -t weather-test --build-arg environment=test .
 		docker run weather-test
