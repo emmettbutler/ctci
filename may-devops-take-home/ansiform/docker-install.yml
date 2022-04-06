@@ -1,0 +1,54 @@
+- become: yes
+  hosts: all
+  name: docker-install
+
+tasks:
+  - name: package | Ensure Docker CE apt-key repo is present
+    ansible.builtin.apt_key:
+      url: https://download.docker.com/linux/ubuntu/gpg
+      state: present
+
+  - name: package | Ensure Docker CE apt repo is present
+    ansible.builtin.apt_repository:
+      repo: "deb [arch=amd64] https://download.docker.com/linux/ubuntu focal stable"
+      state: present
+      filename: docker-ce
+      update_cache: true
+
+  - name: package | Ensure Docker CE package is not held (apt-mark)
+    ansible.builtin.dpkg_selections:
+      name: "{{ item }}"
+      selection: install
+    loop:
+      - docker-ce
+      - docker-ce-cli
+    when: not docker_apt_hold
+
+  - name: package | Ensure Docker CE is installed
+    ansible.builtin.apt:
+      name: "{{ packages }}"
+      state: present
+    when: not ansible_check_mode
+    vars:
+      packages:
+        - "docker-ce=5:{{ docker_version }}*"
+        - "docker-ce-cli=5:{{ docker_version }}*"
+        - containerd.io
+
+  - name: package | Ensure Docker CE package is held (apt-mark)
+    ansible.builtin.dpkg_selections:
+      name: "{{ item }}"
+      selection: hold
+    loop:
+      - docker-ce
+      - docker-ce-cli
+    when: docker_apt_hold
+
+  # other configuration tasks can go here
+
+  - name: service | Ensure Docker Service is enabled/disabled or started/stopped
+    ansible.builtin.service:
+      name: docker.service
+      state: "{{ docker_started | ternary('started', 'stopped') }}"
+      enabled: "{{ docker_enabled }}"
+    when: not ansible_check_mode
