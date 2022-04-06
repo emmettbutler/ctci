@@ -1,0 +1,14 @@
+version: '3.3'
+
+services:
+ notes:
+  build:
+   context: .
+  ports:
+   - 3000:3000
+   - 9229:9229
+  environment:
+   - SERVER_PORT=3000
+  volumes:
+   - ./:/opt/app
+  command: npm run debug
