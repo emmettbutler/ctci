@@ -10,5 +10,14 @@ build:
 	docker tag may $(TAG)
 	docker push $(TAG)
 
-tests:
+tests_unit:
 	npm run test
+
+tests_integration:
+	./integration_tests.sh
+
+deploy_staging:
+	cd deploy && ansible-playbook deploy.yml -e "stage=staging"
+
+deploy_prod:
+	cd deploy && ansible-playbook deploy.yml -e "stage=prod"

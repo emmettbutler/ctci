@@ -1,0 +1,35 @@
+- name: "{{ delegated_host.split('.') | first }} | ensure backend node has been removed and drained (deregister)"
+  delegate_to: "{{ delegated_host }}"
+  become: true
+  when:
+    - stage == "prod"
+  # add logic here to check safe removal from cluster
+
+- name: "{{ delegated_host.split('.') | first }} | ensure may container is present"
+  delegate_to: "{{ delegated_host }}"
+  become: true
+  community.docker.docker_container:
+    name: "{{ container_name }}"
+    image: "{{ image_base_uri }}{{ git_hash }}"
+    state: started
+    restart_policy: unless-stopped
+    container_default_behavior: compatibility
+    pull: true
+    ports:
+      - 8080:3000/tcp
+    keep_volumes: true
+
+- name: "{{ delegated_host.split('.') | first }} | wait for port 8080 to become available"
+  delegate_to: "{{ delegated_host }}"
+  become: true
+  ansible.builtin.wait_for:
+    port: 8080
+    timeout: 120
+    delay: 5
+
+- name: "{{ delegated_host.split('.') | first }} | ensure backend node has been added and healthy (register)"
+  delegate_to: "{{ delegated_host }}"
+  become: true
+  when:
+    - stage == "prod"
+  # add logic here to check healthy addition to cluster

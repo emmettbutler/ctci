@@ -31,8 +31,8 @@ tasks:
     when: not ansible_check_mode
     vars:
       packages:
-        - "docker-ce=5:{{ docker_version }}*"
-        - "docker-ce-cli=5:{{ docker_version }}*"
+        - "docker-ce=5:20.10*"
+        - "docker-ce-cli=5:20.10*"
         - containerd.io
 
   - name: package | Ensure Docker CE package is held (apt-mark)
@@ -49,6 +49,6 @@ tasks:
   - name: service | Ensure Docker Service is enabled/disabled or started/stopped
     ansible.builtin.service:
       name: docker.service
-      state: "{{ docker_started | ternary('started', 'stopped') }}"
-      enabled: "{{ docker_enabled }}"
+      state: "{{ docker_started | ternary('started', 'stopped') }}"  # assumes docker_started is defined elsewhere
+      enabled: "true"
     when: not ansible_check_mode

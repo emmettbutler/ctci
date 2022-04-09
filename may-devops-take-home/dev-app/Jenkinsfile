@@ -1,12 +1,16 @@
+// this pipeline setup assumes that a given stage failing will cause the entire pipeline to abort
 pipeline {
     agent { docker { image 'node:14.19.' } }
     stages {
         stage('test_unit') {
             steps {
-                sh 'make tests'
+                sh 'make tests_unit'
             }
         }
         stage('build') {
+            when {
+                branch 'master'
+            }
             steps {
                 // this assumes that the Jenkins runner has been configured to allow Docker commands as in
                 // https://blog.container-solutions.com/running-docker-in-jenkins-in-docker#:~:text=Open%20the%20Jenkins%20home%20page,sudo%20docker%20run%20hello%2Dworld%22
@@ -14,18 +18,27 @@ pipeline {
             }
         }
         stage('deploy_staging') {
+            when {
+                branch 'master'
+            }
             steps {
-                sh 'node --version'
+                sh 'make deploy_staging'
             }
         }
         stage('test_integration') {
+            when {
+                branch 'master'
+            }
             steps {
-                sh 'node --version'
+                sh 'make tests_integration'
             }
         }
         stage('deploy_prod') {
+            when {
+                branch 'master'
+            }
             steps {
-                sh 'node --version'
+                sh 'make deploy_prod'
             }
         }
     }

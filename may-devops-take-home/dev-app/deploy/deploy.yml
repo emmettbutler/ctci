@@ -1,0 +1,26 @@
+---
+
+- name: Deploy dev-app
+  hosts: localhost
+  gather_facts: false
+
+  vars_prompt:
+    - name: stage
+      prompt: Enter the deployment stage (staging|prod)
+      default: staging
+      private: false
+
+  vars:
+    ansible_python_interpreter: /usr/bin/python3
+    ansible_group:  # this assumes that the ansible inventory has been correctly populated
+      staging: web-staging
+      prod: web-prod
+    container_name: may
+    git_hash: foo  # assumes current git hash populated here
+    image_base_uri: registry.mycoolsite.com:8000/may-
+
+  tasks:
+    - include_tasks: main_tasks.yml
+      loop: "{{ groups[ansible_group[stage]] | sort }}"
+      loop_control:
+        loop_var: delegated_host
