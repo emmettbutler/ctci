@@ -4,6 +4,11 @@ Cypress.on('uncaught:exception', (err, runnable) => {
 })
 
 describe('The RaptorMaps Public Site', () => {
+    beforeEach(() => {
+        // mobile-size viewport affects how this site works
+        cy.viewport(1500, 1000)
+    })
+
     it('The Jobs page can navigate to the Technology page', () => {
         var technology_link_id = '#menu-item-6777'
 
@@ -41,9 +46,6 @@ describe('The RaptorMaps Public Site', () => {
     })
 
     it('The solar_farms API endpoint page should have the expected elements', () => {
-        // mobile-size viewport affects how this page works
-        cy.viewport(1500, 1000)
-
         cy.visit('https://docs.raptormaps.com/reference/reference-getting-started#reference-getting-started')
 
         cy.get('span').contains('Solar Farm Endpoints').parents('a').click()
@@ -55,5 +57,29 @@ describe('The RaptorMaps Public Site', () => {
         })
         cy.get('h1').contains('/api/v2/solar_farms').should('be.inViewport')
         cy.get('p').contains('Warning: Use https://docs.raptormaps.com/v3.0/reference#search_solar_farms_by_name Endpoint to retrieve all solar farms that you have access to view in a particular organization').should('be.inViewport')
+    })
+
+    it('The API endpoint tester works properly', () => {
+        cy.visit('https://docs.raptormaps.com/reference/apiv2solar_farms')
+
+        cy.get('#APIAuth-Authentication-Token').type('WyIyMDA3IiwiJDUkcm91bmRzPTUzNTAwMCQ4czdkZ0lyZkxRalN1TXlkJHZJbXJPMzFVdERYZDFlTDRZTmdDaHJwUjBhRmIydW0vampvQWYzTE1iUzYiXQ.Yk-w_w.dGRb3xdsG6TgzOTHYdhh0eSmHWk')
+
+        var org_id_label = cy.get('div.form-group>div.Param-left7tTo9KK0E0kY>div.Param-header3wXBpbDTP1O6>label').contains('org_id')
+        org_id_label.parents().get('div.form-group').find('input').type('228')
+        cy.get('button').contains('Try It!').click()
+
+        cy.get('button.APIResponse-copyButton1Wx_vGKSR6nt').realClick()
+        cy.window().then((win) => {
+            win.navigator.clipboard.readText().then((text) => {
+                var response = JSON.parse(text),
+                    postman = null;
+                response.solar_farms.forEach(farm => {
+                    if (farm.name == 'Test Postman Routes - QA Team') {
+                        postman = farm
+                    }
+                })
+                expect(postman.uuid).to.eq('8bb07ba1-2661-4f89-8dca-4292c378e665');
+            });
+        });
     })
 })
