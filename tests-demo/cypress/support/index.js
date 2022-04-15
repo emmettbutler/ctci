@@ -15,6 +15,11 @@
 
 // Import commands.js using ES2015 syntax:
 import './commands'
+import inViewport from './inViewport'
 
 // Alternatively you can use CommonJS syntax:
 // require('./commands')
+
+before(() => {
+    chai.use(inViewport);
+});
