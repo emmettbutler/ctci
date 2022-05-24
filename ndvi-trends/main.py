@@ -38,9 +38,9 @@ response = requests.post(
 
     function setup() {
       return {
-        input: ["B02", "B03", "B04"],
+        input: ["B08", "B04"],
         output: {
-          bands: 3
+          bands: 1
         }
       };
     }
@@ -52,7 +52,7 @@ response = requests.post(
       customData,
       outputMetadata
     ) {
-      return [2.5 * sample.B04, 2.5 * sample.B03, 2.5 * sample.B02];
+      return [(sample.B08 - sample.B04) / (sample.B08 + sample.B04)];
     }
     """,
     },
@@ -60,3 +60,9 @@ response = requests.post(
 
 image = Image.open(io.BytesIO(response.content))
 image.show()
+histogram = image.histogram()
+avg = 0
+for count, value in enumerate(histogram):
+    avg += count * value
+avg /= sum(histogram)
+print(f"avg NDVI: {avg}")
