@@ -17,6 +17,7 @@ class AccessLogAggregate:
     ):
         self.bucket_size_seconds: int = bucket_size_seconds
         self.bucket: dt.datetime = bucket
+        self.added_count: int = 0
         self.latest_time_before_close: dt.datetime = self.bucket + dt.timedelta(
             seconds=self.bucket_size_seconds + 30
         )
@@ -34,6 +35,7 @@ class AccessLogAggregate:
             logging.warning(f"Received event for already-closed alerting window {self}")
             return
 
+        self.added_count += 1
         self.total_events += unit.total_events
         self.first_event_timestamp = min(
             self.first_event_timestamp, unit.first_event_timestamp
@@ -57,6 +59,7 @@ class AccessLogAggregate:
 
 
 def read_access_log() -> Generator:
+    """Returns a generator of AccessLogEvent objects"""
     return ()
 
 
@@ -86,11 +89,19 @@ def make_aggregates(
 
         if False and size_index < len(bucket_sizes_seconds) - 1:  # when to recurse?
             yield from make_aggregates(
-                aggregates_for_size.values(), bucket_sizes_seconds[size_index + 1]
+                aggregates_for_size.values(), bucket_sizes_seconds, size_index + 1
             )
 
         for _, open_aggregate in aggregates_for_size.items():
-            if unit.bucket > open_aggregate.latest_time_before_close:
+            aggregate_full = False
+            if size_index > 0:
+                aggregate_full = (
+                    open_aggregate.added_count
+                    >= bucket_sizes_seconds[size_index]
+                    // bucket_sizes_seconds[size_index - 1]
+                )
+            time_window_ended = unit.bucket > open_aggregate.latest_time_before_close
+            if aggregate_full or time_window_ended:
                 yield open_aggregate
                 open_aggregate.close()
 
