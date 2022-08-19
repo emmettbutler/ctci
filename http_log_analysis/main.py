@@ -63,8 +63,16 @@ class AccessLogAggregate:
         logging.info(f"Top sections: {self.top_sections}")
         logging.info("----------------")
 
-    def evaluate_alerts(self):
-        pass
+    def evaluate_alert(self):
+        return self.total_events > self.bucket_size_seconds * 10
+
+    def log_alert_triggered(self):
+        logging.warning(
+            "More than 10 events per second over the current two-minute period"
+        )
+
+    def log_alert_resolved(self):
+        logging.warning("Event volume fell below 10 events per second")
 
     def close(self):
         self.is_closed = True
@@ -120,8 +128,15 @@ def log_stats(
 def evaluate_alerts(
     aggregates: Generator[AccessLogAggregate, None, None],
 ) -> Generator[AccessLogAggregate, None, None]:
+    is_alerting = False
     for aggregate in aggregates:
-        aggregate.evaluate_alerts()
+        alert_triggered = aggregate.evaluate_alert()
+        if not is_alerting and alert_triggered:
+            is_alerting = True
+            aggregate.log_alert_triggered()
+        if is_alerting and not alert_triggered:
+            is_alerting = False
+            aggregate.log_alert_resolved()
         yield aggregate
 
 
@@ -132,7 +147,6 @@ def main():
     aggs = make_aggregates(log_entries, 10)
     aggs = log_stats(aggs)
     aggs = make_aggregates(aggs, 60 * 2)
-    aggs = log_stats(aggs)
     aggs = evaluate_alerts(aggs)
     for agg in aggs:
         pass
