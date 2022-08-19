@@ -12,11 +12,6 @@ AccessLogEvent = namedtuple(
 )
 
 
-def section_from_request(request: str) -> str:
-    """Given a request string from an access log, return the section name"""
-    return f"/{request.split()[1].split('/')[1]}"
-
-
 class AccessLogAggregate:
     def __init__(
         self,
@@ -264,6 +259,11 @@ def parse_args():
         "Defaults to 0 (no playback delay)",
     )
     return parser.parse_args()
+
+
+def section_from_request(request: str) -> str:
+    """Given a request string from an access log, return the section name"""
+    return f"/{request.split()[1].split('/')[1]}"
 
 
 def exhaust(generator: Generator):
