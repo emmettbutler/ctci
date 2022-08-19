@@ -3,13 +3,8 @@ import csv
 import logging
 import time
 from collections import Counter, deque, namedtuple
-from typing import Generator, Tuple
+from typing import Generator
 
-# generating this namedtuple from the file's header would make it handle log schema changes
-AccessLogEvent = namedtuple(
-    "AccessLogEvent",
-    ["remotehost", "rfc931", "authuser", "date", "request", "status", "bytes"],
-)
 AvailabilityTuple = namedtuple(
     "AvailabilityTuple",
     ["total", "successes", "failures"],
@@ -21,11 +16,11 @@ class AccessLogAggregate:
         self,
         bucket_size_seconds: int,
         bucket: int,
-        event: AccessLogEvent = None,
+        event: dict = None,
     ):
         """Create an aggregate over a time-grouping of other AccessLogAggregates
 
-        An AccessLogAggregate can represent one or more AccessLogEvents. When it represents only one event,
+        An AccessLogAggregate can represent one or more log events. When it represents only one event,
         self.bucket_size_seconds is 0.
 
         :param bucket_size_seconds: The size of the time bucket represented by this aggregate
@@ -46,34 +41,32 @@ class AccessLogAggregate:
 
         if event is not None:
             self.bucket_size_seconds = 0
-            self.top_sections = Counter([section_from_request(event.request)])
-            self.top_hosts = Counter([event.remotehost])
-            self.top_status_codes = Counter([event.status])
+            self.top_sections = Counter(
+                [section_from_request(event.get("request", "GET / HTTP/1.0"))]
+            )
+            self.top_hosts = Counter([event.get("remotehost", "foo")])
+            self.top_status_codes = Counter([event.get("status", "<unknown>")])
             self.availability = AvailabilityTuple(
                 1,
-                int(event.status == "200"),
-                int(event.status != "200"),
+                int(event.get("status") == "200"),
+                int(event.get("status") != "200"),
             )
-            self.bytes = int(event.bytes)
+            self.bytes = int(event.get("bytes", 0))
 
     def __repr__(self):
         return f"<AccessLogAggregate bucket={self.bucket} bucket_size_seconds={self.bucket_size_seconds}>"
 
     def add(self, aggregate):
         """Update analysis counters with information from the given aggregate"""
+        # discard events for very old time windows that may appear due to out-of-order delivery
         if self.is_closed:
             logging.warning(f"Received event for already-closed alerting window {self}")
             return
 
-        self.top_sections.update(
-            {section: count for section, count in aggregate.top_sections.items()}
-        )
-        self.top_hosts.update(
-            {host: count for host, count in aggregate.top_hosts.items()}
-        )
-        self.top_status_codes.update(
-            {status: count for status, count in aggregate.top_status_codes.items()}
-        )
+        for attr in ("sections", "hosts", "status_codes"):
+            getattr(self, f"top_{attr}").update(
+                {key: count for key, count in getattr(aggregate, f"top_{attr}").items()}
+            )
         self.availability = AvailabilityTuple(
             self.availability.total + aggregate.availability.total,
             self.availability.successes + aggregate.availability.successes,
@@ -107,7 +100,7 @@ class AccessLogMonitor:
         """
         self.window_size_seconds = 0
         self.min_window_size_seconds = window_size_seconds
-        self.first_event_timestamp = 99999999999
+        self.first_event_timestamp = 0
         self.last_event_timestamp = 0
         self.alert_threshold = threshold
         self.events = events
@@ -128,6 +121,8 @@ class AccessLogMonitor:
         Maintains a sliding window by expelling old events as new ones are added
         Tracks the size of the window in seconds
         """
+        # feels like this could be more efficient, but avoiding an iteration over the entire window
+        # would require a guarantee that it's sorted by timestamp. possible future improvement.
         self.window = [
             e
             for e in self.window
@@ -184,7 +179,7 @@ class AccessLogMonitor:
 def read_access_log(
     input_file: str, timescale: float
 ) -> Generator[AccessLogAggregate, None, None]:
-    """Generates AccessLogAggregates from a CSV HTTP access logfile with a schema conforming to AccessLogEvent
+    """Generates AccessLogAggregates from a CSV HTTP access logfile
 
     Simulates delayed event arrival with time.sleep.
     Minimizes memory usage by lazily reading from disk.
@@ -196,17 +191,16 @@ def read_access_log(
     current_timestamp = 0
     with open(input_file, newline="") as csvfile:
         reader = csv.DictReader(csvfile, delimiter=",", quotechar='"')
-        for row in reader:
-            event = AccessLogEvent(**row)
+        for event in reader:
             time.sleep(
                 (
-                    max(int(event.date) - current_timestamp, 0)
+                    max(int(event.get("date")) - current_timestamp, 0)
                     if current_timestamp
                     else 0
                 )
                 * timescale
             )
-            current_timestamp = int(event.date)
+            current_timestamp = int(event.get("date"))
             logging.debug(event)
             aggregate = AccessLogAggregate(0, current_timestamp, event)
             logging.debug(aggregate)
@@ -247,7 +241,7 @@ def aggregate_stats(
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        description="Monitor and analyze a CSV HTTP access log with a schema conforming to AccessLogEvent. "
+        description="Monitor and analyze a CSV HTTP access log. "
         "Simulates delayed event arrival with time.sleep."
     )
     parser.add_argument(

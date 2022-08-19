@@ -6,7 +6,6 @@ from unittest.mock import Mock
 
 from main import (
     AccessLogAggregate,
-    AccessLogEvent,
     AccessLogMonitor,
     AvailabilityTuple,
     aggregate_stats,
@@ -84,15 +83,15 @@ class HTTPLogAnalyzerUnitTests(unittest.TestCase):
         ), "Monitor evaluation on untriggered monitor not exceeding threshold should not trigger an alert"
 
     def test_aggregate_add(self):
-        event = AccessLogEvent(
-            "10.0.0.1",
-            "-",
-            "apache",
-            "1549574332",
-            "GET /api/user HTTP/1.0",
-            "200",
-            "1234",
-        )
+        event = {
+            "remotehost": "10.0.0.1",
+            "rfc931": "-",
+            "authuser": "apache",
+            "date": "1549574332",
+            "request": "GET /api/user HTTP/1.0",
+            "status": "200",
+            "bytes": "1234",
+        }
         agg = AccessLogAggregate(0, 12345, event)
         agg.add(AccessLogAggregate(0, 12346, event))
         assert (
