@@ -25,6 +25,9 @@ You can run the unit test suite with this command:
 $ python3.10 tests.py
 ```
 
+This program could scale to large data volumes by reading multiple files in parallel using multiple processes. Once it was tuned to use
+all of the available resources on a single machine, it could be deployed to multiple machines, reading multiple files on each.
+
 I spent about eight hours creating this.
 
 Possible improvements
@@ -32,7 +35,8 @@ Possible improvements
 
 * Support more log formats than just this one CSV schema
 * Send alerts to a pager service
-* Include outlier characteristics in alerts (for example, "host 10.0.0.1 accounts for 90% of the traffic in this window")
+* Include outlier characteristics in alerts (for example, "status 500 from host 10.0.0.1 accounts for 90% of the traffic in this window")
 * Calculate performance against an SLO based on availability tracking
 * Support multiple alert types (maybe even configurable) beyond avg event count per time window
 * Keep sliding window sorted to enable more efficient window pruning
+* Consider organizing toplevel functions into a class interface
