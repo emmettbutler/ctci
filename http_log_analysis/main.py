@@ -1,7 +1,6 @@
 import csv
-import datetime as dt
 import logging
-from collections import Counter, defaultdict, namedtuple
+from collections import Counter, namedtuple
 from typing import Generator
 
 AccessLogEvent = namedtuple(
@@ -23,10 +22,7 @@ class AccessLogAggregate:
     ):
         self.bucket_size_seconds: int = bucket_size_seconds
         self.bucket: int = bucket
-        self.added_count: int = 0
         self.latest_time_before_close: int = self.bucket + self.bucket_size_seconds + 30
-        self.first_event_timestamp: int = self.bucket
-        self.last_event_timestamp: int = self.bucket + self.bucket_size_seconds
         self.top_sections: dict = Counter()
         self.total_events: int = 0
         self.is_closed: bool = False
@@ -43,14 +39,7 @@ class AccessLogAggregate:
             logging.warning(f"Received event for already-closed alerting window {self}")
             return
 
-        self.added_count += 1
         self.total_events += unit.total_events
-        self.first_event_timestamp = min(
-            self.first_event_timestamp, unit.first_event_timestamp
-        )
-        self.last_event_timestamp = max(
-            self.last_event_timestamp, unit.last_event_timestamp
-        )
         self.top_sections.update(
             {section: count for section, count in unit.top_sections.items()}
         )
