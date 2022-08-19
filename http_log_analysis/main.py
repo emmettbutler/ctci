@@ -1,7 +1,8 @@
+import csv
 import datetime as dt
 import logging
-from collections import defaultdict, namedtuple
-from typing import Generator, Tuple
+from collections import Counter, defaultdict, namedtuple
+from typing import Generator
 
 AccessLogEvent = namedtuple(
     "AccessLogEvent",
@@ -9,26 +10,33 @@ AccessLogEvent = namedtuple(
 )
 
 
+def section_from_request(request: str) -> str:
+    return f"/{request.split()[1].split('/')[1]}"
+
+
 class AccessLogAggregate:
     def __init__(
         self,
         bucket_size_seconds: int,
-        bucket: dt.datetime,
+        bucket: int,
+        event: AccessLogEvent = None,
     ):
         self.bucket_size_seconds: int = bucket_size_seconds
-        self.bucket: dt.datetime = bucket
+        self.bucket: int = bucket
         self.added_count: int = 0
-        self.latest_time_before_close: dt.datetime = self.bucket + dt.timedelta(
-            seconds=self.bucket_size_seconds + 30
-        )
-        self.first_event_timestamp: dt.datetime = dt.datetime.max
-        self.last_event_timestamp: dt.datetime = dt.datetime.min
-        self.top_sections: dict = defaultdict(int)
+        self.latest_time_before_close: int = self.bucket + self.bucket_size_seconds + 30
+        self.first_event_timestamp: int = self.bucket
+        self.last_event_timestamp: int = self.bucket + self.bucket_size_seconds
+        self.top_sections: dict = Counter()
         self.total_events: int = 0
         self.is_closed: bool = False
 
+        if event is not None:
+            self.total_events = 1
+            self.top_sections = Counter([section_from_request(event.request)])
+
     def __repr__(self):
-        return f"<AccessLogAggregate bucket={self.bucket.timestamp()} bucket_size_seconds={self.bucket_size_seconds}>"
+        return f"<AccessLogAggregate bucket={self.bucket} bucket_size_seconds={self.bucket_size_seconds}>"
 
     def add(self, unit):
         if self.is_closed:
@@ -43,16 +51,20 @@ class AccessLogAggregate:
         self.last_event_timestamp = max(
             self.last_event_timestamp, unit.last_event_timestamp
         )
-        # TODO add top sections from unit
+        self.top_sections.update(
+            {section: count for section, count in unit.top_sections.items()}
+        )
 
     def log_stats(self):
         logging.info("----------------")
-        logging.info(f"Bucket: {self.bucket.timestamp()}")
+        logging.info(f"Bucket: {self.bucket}")
+        logging.info(f"Bucket size: {self.bucket_size_seconds}s")
         logging.info(f"Total events: {self.total_events}")
+        logging.info(f"Top sections: {self.top_sections}")
         logging.info("----------------")
 
     def evaluate_alerts(self):
-        logging.info("Here are some alerts")
+        pass
 
     def close(self):
         self.is_closed = True
@@ -60,57 +72,70 @@ class AccessLogAggregate:
 
 def read_access_log() -> Generator:
     """Returns a generator of AccessLogEvent objects"""
-    return ()
+    with open("readme_sample_csv.txt", newline="") as csvfile:
+        reader = csv.DictReader(csvfile, delimiter=",", quotechar='"')
+        for row in reader:
+            event = AccessLogEvent(**row)
+            logging.debug(event)
+            aggregate = AccessLogAggregate(0, int(event.date), event)
+            logging.debug(aggregate)
+            yield aggregate
 
 
 def snap_to_bucket(timestamp: int, aggregate_seconds: int) -> int:
-    """Round the given timestamp to the boundary of the latest preceding <aggregate_seconds>-second bucket"""
-    return 0
+    """Return the start timestamp of the latest <aggregate_seconds>-second bucket preceding <timestamp>"""
+    return timestamp - timestamp % aggregate_seconds
 
 
 def make_aggregates(
-    units: Generator[AccessLogAggregate | AccessLogEvent],
-    bucket_sizes_seconds: Tuple[int],
-    size_index: int = 0,
+    units: Generator[AccessLogAggregate, None, None],
+    bucket_size_seconds: int,
 ) -> Generator:
-    bucket_sizes_seconds = sorted(set(bucket_sizes_seconds))
-    open_aggregates: dict[int, dict[int]] = {
-        bucket_size: {} for bucket_size in bucket_sizes_seconds
-    }
+    all_aggregates: dict[int] = {}
     for unit in units:
-        aggregate_seconds = bucket_sizes_seconds[size_index]
         # TODO: free closed aggregates after a while
-        aggregates_for_size = open_aggregates[aggregate_seconds]
-        bucket = snap_to_bucket(unit.bucket, aggregate_seconds)
+        bucket = snap_to_bucket(unit.bucket, bucket_size_seconds)
 
-        if bucket not in open_aggregates:
-            aggregates_for_size[bucket] = AccessLogAggregate(aggregate_seconds, bucket)
-        aggregates_for_size[bucket].add(unit)
+        if bucket not in all_aggregates:
+            all_aggregates[bucket] = AccessLogAggregate(bucket_size_seconds, bucket)
+        all_aggregates[bucket].add(unit)
 
-        if False and size_index < len(bucket_sizes_seconds) - 1:  # when to recurse?
-            yield from make_aggregates(
-                aggregates_for_size.values(), bucket_sizes_seconds, size_index + 1
-            )
+        for _, aggregate in all_aggregates.items():
+            if (
+                not aggregate.is_closed
+                and unit.bucket > aggregate.latest_time_before_close
+            ):
+                yield aggregate
+                aggregate.close()
 
-        for _, open_aggregate in aggregates_for_size.items():
-            aggregate_full = False
-            if size_index > 0:
-                aggregate_full = (
-                    open_aggregate.added_count
-                    >= bucket_sizes_seconds[size_index]
-                    // bucket_sizes_seconds[size_index - 1]
-                )
-            time_window_ended = unit.bucket > open_aggregate.latest_time_before_close
-            if aggregate_full or time_window_ended:
-                yield open_aggregate
-                open_aggregate.close()
+
+def log_stats(
+    aggregates: Generator[AccessLogAggregate, None, None],
+) -> Generator[AccessLogAggregate, None, None]:
+    for aggregate in aggregates:
+        aggregate.log_stats()
+        yield aggregate
+
+
+def evaluate_alerts(
+    aggregates: Generator[AccessLogAggregate, None, None],
+) -> Generator[AccessLogAggregate, None, None]:
+    for aggregate in aggregates:
+        aggregate.evaluate_alerts()
+        yield aggregate
 
 
 def main():
-    aggregates = make_aggregates(read_access_log(), (10, 60 * 2))
-    for aggregate in aggregates:
-        aggregate.log_stats()
-        aggregate.evaluate_alerts()
+    logging.basicConfig(level=logging.INFO)
+
+    log_entries = read_access_log()
+    aggs = make_aggregates(log_entries, 10)
+    aggs = log_stats(aggs)
+    aggs = make_aggregates(aggs, 60 * 2)
+    aggs = log_stats(aggs)
+    aggs = evaluate_alerts(aggs)
+    for agg in aggs:
+        pass
 
 
 if __name__ == "__main__":
