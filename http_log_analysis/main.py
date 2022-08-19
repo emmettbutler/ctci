@@ -116,11 +116,13 @@ class AccessLogMonitor:
 
         :param timestamp: The current time
         """
-        average_events_per_second = len(self.window) / self.window_size_seconds
+        average_events_per_second = len(self.window) / (self.window_size_seconds or 1)
         if average_events_per_second > self.alert_threshold:
             self.trigger_alert(average_events_per_second, timestamp)
+            return True
         else:
             self.resolve_alert(average_events_per_second, timestamp)
+            return False
 
     def trigger_alert(self, average_events_per_second, current_time):
         if not self.alert_triggered:
