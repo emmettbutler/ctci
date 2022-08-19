@@ -12,6 +12,17 @@ from main import (
 
 
 class HTTPLogAnalyzerUnitTests(unittest.TestCase):
+    def setUp(self):
+        agg1 = Mock(spec=AccessLogAggregate)
+        agg1.bucket = 123456789
+        agg1.total_events = 1
+        agg1.top_sections = {}
+        agg2 = Mock(spec=AccessLogAggregate)
+        agg2.bucket = 123456589
+        agg2.total_events = 1
+        agg2.top_sections = {}
+        self.events = [agg1, agg2]
+
     def test_section_from_request(self):
         result = section_from_request("GET /api/user HTTP/1.0")
         assert (
@@ -24,19 +35,6 @@ class HTTPLogAnalyzerUnitTests(unittest.TestCase):
         assert isinstance(
             result[0], AccessLogAggregate
         ), "read_access_log should return a sequence of AccessLogAggregates"
-
-
-class AccessLogMonitorUnitTests(unittest.TestCase):
-    def setUp(self):
-        agg1 = Mock(spec=AccessLogAggregate)
-        agg1.bucket = 123456789
-        agg1.total_events = 1
-        agg1.top_sections = {}
-        agg2 = Mock(spec=AccessLogAggregate)
-        agg2.bucket = 123456589
-        agg2.total_events = 1
-        agg2.top_sections = {}
-        self.events = [agg1, agg2]
 
     def test_aggregate_stats(self):
         result = list(aggregate_stats(self.events, 10))
@@ -65,8 +63,6 @@ class AccessLogMonitorUnitTests(unittest.TestCase):
             monitor.alert_triggered is False
         ), "Monitor evaluation on untriggered monitor not exceeding threshold should not trigger an alert"
 
-
-class AccessLogAggregateUnitTests(unittest.TestCase):
     def test_aggregate_add(self):
         event = AccessLogEvent(
             "10.0.0.1", "-", "apache", 1549574332, "GET /api/user HTTP/1.0", 200, 1234
