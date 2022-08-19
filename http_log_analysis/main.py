@@ -3,12 +3,16 @@ import csv
 import logging
 import time
 from collections import Counter, deque, namedtuple
-from typing import Generator
+from typing import Generator, Tuple
 
 # generating this namedtuple from the file's header would make it handle log schema changes
 AccessLogEvent = namedtuple(
     "AccessLogEvent",
     ["remotehost", "rfc931", "authuser", "date", "request", "status", "bytes"],
+)
+AvailabilityTuple = namedtuple(
+    "AvailabilityTuple",
+    ["total", "successes", "failures"],
 )
 
 
@@ -21,6 +25,9 @@ class AccessLogAggregate:
     ):
         """Create an aggregate over a time-grouping of other AccessLogAggregates
 
+        An AccessLogAggregate can represent one or more AccessLogEvents. When it represents only one event,
+        self.bucket_size_seconds is 0.
+
         :param bucket_size_seconds: The size of the time bucket represented by this aggregate
         :param bucket: The epoch timestamp of the beginning of the time bucket represented by this aggregate
         :param event: An event that, if given, initializes analysis counters for the aggregate
@@ -31,12 +38,23 @@ class AccessLogAggregate:
         # accounts for out-of-order event arrival
         self.latest_time_before_close: int = self.bucket + self.bucket_size_seconds + 30
         self.top_sections: dict = Counter()
-        self.total_events: int = 0
+        self.top_hosts: dict = Counter()
+        self.top_status_codes: dict = Counter()
+        self.availability: AvailabilityTuple = AvailabilityTuple(1, 1, 0)
+        self.bytes: int = 0
         self.is_closed: bool = False
 
         if event is not None:
-            self.total_events = 1
+            self.bucket_size_seconds = 0
             self.top_sections = Counter([section_from_request(event.request)])
+            self.top_hosts = Counter([event.remotehost])
+            self.top_status_codes = Counter([event.status])
+            self.availability = AvailabilityTuple(
+                1,
+                int(event.status == "200"),
+                int(event.status != "200"),
+            )
+            self.bytes = int(event.bytes)
 
     def __repr__(self):
         return f"<AccessLogAggregate bucket={self.bucket} bucket_size_seconds={self.bucket_size_seconds}>"
@@ -47,16 +65,28 @@ class AccessLogAggregate:
             logging.warning(f"Received event for already-closed alerting window {self}")
             return
 
-        self.total_events += aggregate.total_events
         self.top_sections.update(
             {section: count for section, count in aggregate.top_sections.items()}
         )
+        self.top_hosts.update(
+            {host: count for host, count in aggregate.top_hosts.items()}
+        )
+        self.top_status_codes.update(
+            {status: count for status, count in aggregate.top_status_codes.items()}
+        )
+        self.availability = AvailabilityTuple(
+            self.availability.total + aggregate.availability.total,
+            self.availability.successes + aggregate.availability.successes,
+            self.availability.failures + aggregate.availability.failures,
+        )
+        self.bytes += aggregate.bytes
 
     def close(self):
         """Mark this aggregate as closed and log its collected stats"""
         logging.info(
-            f"Bucket={self.bucket}\tBucket size={self.bucket_size_seconds}s\t\tTotal events={self.total_events}\t\t"
-            f"Top sections={self.top_sections}"
+            f"Bucket={self.bucket}\n\tBucket size={self.bucket_size_seconds}s\n\t"
+            f"Top sections={self.top_sections}\n\tTop hosts={self.top_hosts}\n\t"
+            f"Top status codes={self.top_status_codes}\n\tAvailability={self.availability}\n\tBytes={self.bytes}\n"
         )
         self.is_closed = True
 
@@ -129,12 +159,12 @@ class AccessLogMonitor:
             self.alert_triggered = True
             logging.warning(
                 f"High traffic generated an alert - hits = {average_events_per_second:.2f}/s, "
-                f"triggered at {current_time}"
+                f"triggered at {current_time}\n"
             )
             logging.debug(
-                f"window_size={self.window_size_seconds}s\t\tTotal events={len(self.window)}\t\t"
-                f"avg_events_per_second={average_events_per_second:.2f}\t"
-                f"More than {self.alert_threshold} events per second"
+                f"window_size={self.window_size_seconds}s\n\tTotal events={len(self.window)}\n\t"
+                f"avg_events_per_second={average_events_per_second:.2f}\n\t"
+                f"More than {self.alert_threshold} events per second\n"
             )
 
     def resolve_alert(self, average_events_per_second, current_time):
@@ -142,12 +172,12 @@ class AccessLogMonitor:
             self.alert_triggered = False
             logging.warning(
                 f"Reduced traffic resolved an alert - hits = {average_events_per_second:.2f}/s, "
-                f"resolved at {current_time}"
+                f"resolved at {current_time}\n"
             )
             logging.debug(
-                f"window_size={self.window_size_seconds}s\t\tTotal events={len(self.window)}\t\t"
-                f"avg_events_per_second={average_events_per_second}\t"
-                f"Fewer than {self.alert_threshold} events per second"
+                f"window_size={self.window_size_seconds}s\n\tTotal events={len(self.window)}\n\t"
+                f"avg_events_per_second={average_events_per_second}\n\t"
+                f"Fewer than {self.alert_threshold} events per second\n"
             )
 
 
