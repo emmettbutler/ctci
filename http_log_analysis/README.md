@@ -6,7 +6,7 @@ This is a tool that facilitates simple analysis on HTTP logfiles formatted as CS
 Run it with this command:
 
 ```sh
-$ python3.10 main.py readme_sample_csv.txt --timescale 0.01
+$ python main.py readme_sample_csv.txt --timescale 0.01
 ```
 
 You can provide a different input file if you want. If you do, make sure it conforms to the same CSV schema as the txt file included here.
@@ -14,21 +14,19 @@ You can provide a different input file if you want. If you do, make sure it conf
 You can also adjust various analysis values at the CLI, including alert threshold and window size. Use this command for more details:
 
 ```sh
-$ python3.10 main.py --help
+$ python main.py --help
 ```
 
-This tool has no Python dependencies - it uses only the Python 3.10 standard library.
+This tool has no Python dependencies - it uses only the Python standard library. It's compatible with Python versions 3.7 and above.
 
 You can run the unit test suite with this command:
 
 ```sh
-$ python3.10 tests.py
+$ python tests.py
 ```
 
 This program could scale to large data volumes by reading multiple files in parallel using multiple processes. Once it was tuned to use
 all of the available resources on a single machine, it could be deployed to multiple machines, reading multiple files on each.
-
-I spent about eight hours creating this.
 
 Possible improvements
 ---------------------
@@ -40,3 +38,13 @@ Possible improvements
 * Support multiple alert types (maybe even configurable) beyond avg event count per time window
 * Keep sliding window sorted to enable more efficient window pruning
 * Consider organizing toplevel functions into a class interface
+
+Notes
+-----
+
+I spent about eight hours creating this.
+
+The Python code was linted with Black and Isort using [this vim config](https://github.com/emmettbutler/emmettbutler/blob/master/ansible/roles/development/files/nvim/init.lua).
+
+The lack of requirements files is an intentional choice to make this program very easy to run. If there were third-party dependencies, they would
+be managed using Poetry.
