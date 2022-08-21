@@ -2,13 +2,8 @@ import argparse
 import csv
 import logging
 import time
-from collections import Counter, deque, namedtuple
+from collections import Counter, deque
 from typing import Generator
-
-AvailabilityTuple = namedtuple(
-    "AvailabilityTuple",
-    ["total", "successes", "failures"],
-)
 
 
 class AccessLogAggregate:
@@ -35,7 +30,7 @@ class AccessLogAggregate:
         self.top_sections: dict = Counter()
         self.top_hosts: dict = Counter()
         self.top_status_codes: dict = Counter()
-        self.availability: AvailabilityTuple = AvailabilityTuple(1, 1, 0)
+        self.availability: dict = Counter()
         self.bytes: int = 0
         self.is_closed: bool = False
 
@@ -46,10 +41,12 @@ class AccessLogAggregate:
             )
             self.top_hosts = Counter([event.get("remotehost", "foo")])
             self.top_status_codes = Counter([event.get("status", "<unknown>")])
-            self.availability = AvailabilityTuple(
-                1,
-                int(event.get("status") == "200"),
-                int(event.get("status") != "200"),
+            self.availability = Counter(
+                {
+                    "total": 1,
+                    "successes": int(event.get("status") == "200"),
+                    "failures": int(event.get("status") != "200"),
+                }
             )
             self.bytes = int(event.get("bytes", 0))
 
@@ -67,11 +64,7 @@ class AccessLogAggregate:
             getattr(self, f"top_{attr}").update(
                 {key: count for key, count in getattr(aggregate, f"top_{attr}").items()}
             )
-        self.availability = AvailabilityTuple(
-            self.availability.total + aggregate.availability.total,
-            self.availability.successes + aggregate.availability.successes,
-            self.availability.failures + aggregate.availability.failures,
-        )
+        self.availability.update(aggregate.availability)
         self.bytes += aggregate.bytes
 
     def close(self):

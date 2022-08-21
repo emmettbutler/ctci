@@ -7,7 +7,6 @@ from unittest.mock import Mock
 from main import (
     AccessLogAggregate,
     AccessLogMonitor,
-    AvailabilityTuple,
     aggregate_stats,
     read_access_log,
     section_from_request,
@@ -24,7 +23,7 @@ class HTTPLogAnalyzerUnitTests(unittest.TestCase):
         agg1.top_sections = {}
         agg1.top_hosts = {}
         agg1.top_status_codes = {}
-        agg1.availability = AvailabilityTuple(1, 1, 1)
+        agg1.availability = {}
         agg1.bytes = 0
         agg2 = deepcopy(agg1)
         agg2.bucket = 123456589
@@ -50,7 +49,9 @@ class HTTPLogAnalyzerUnitTests(unittest.TestCase):
         assert result[0].top_sections == {"/api": 1}
         assert result[0].top_hosts == {"10.0.0.2": 1}
         assert result[0].top_status_codes == {"200": 1}
-        assert result[0].availability == (1, 1, 0)
+        assert result[0].availability["total"] == 1
+        assert result[0].availability["successes"] == 1
+        assert result[0].availability["failures"] == 0
         assert result[0].bytes == 1234
         assert result[0].is_closed is False
         assert result[0].latest_time_before_close > 0
@@ -95,14 +96,15 @@ class HTTPLogAnalyzerUnitTests(unittest.TestCase):
         agg = AccessLogAggregate(0, 12345, event)
         agg.add(AccessLogAggregate(0, 12346, event))
         assert (
-            agg.availability.total == 2
+            agg.availability["total"] == 2
         ), "total events counting from AccessLogAggregate.add should be accurate"
         assert (
             agg.top_sections["/api"] == 2
         ), "top section counting from AccessLogAggregate.add should be accurate"
         assert agg.top_hosts == {"10.0.0.1": 2}
         assert agg.top_status_codes == {"200": 2}
-        assert agg.availability == (2, 2, 0)
+        assert agg.availability["successes"] == 2
+        assert agg.availability["failures"] == 0
         assert agg.bytes == 2468
 
 
