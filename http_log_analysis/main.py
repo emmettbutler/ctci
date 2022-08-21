@@ -57,7 +57,9 @@ class AccessLogAggregate:
         """Update analysis counters with information from the given aggregate"""
         # discard events for very old time windows that may appear due to out-of-order delivery
         if self.is_closed:
-            logging.warning(f"Received event for already-closed alerting window {self}")
+            logging.warning(
+                "Received event for already-closed alerting window %s", self
+            )
             return
 
         for attr in ("sections", "hosts", "status_codes"):
@@ -70,9 +72,15 @@ class AccessLogAggregate:
     def close(self):
         """Mark this aggregate as closed and log its collected stats"""
         logging.info(
-            f"Bucket={self.bucket}\n\tBucket size={self.bucket_size_seconds}s\n\t"
-            f"Top sections={self.top_sections}\n\tTop hosts={self.top_hosts}\n\t"
-            f"Top status codes={self.top_status_codes}\n\tAvailability={self.availability}\n\tBytes={self.bytes}\n"
+            "Bucket=%s\n\tBucket size=%ss\n\tTop sections=%s\n\tTop hosts=%s\n\t"
+            "Top status codes=%s\n\tAvailability=%s\n\tBytes=%s\n",
+            self.bucket,
+            self.bucket_size_seconds,
+            self.top_sections,
+            self.top_hosts,
+            self.top_status_codes,
+            self.availability,
+            self.bytes,
         )
         self.is_closed = True
 
@@ -142,30 +150,38 @@ class AccessLogMonitor:
             self.resolve_alert(average_events_per_second, timestamp)
             return False
 
-    def trigger_alert(self, average_events_per_second, current_time):
+    def trigger_alert(self, average_events_per_second: float, current_time: int):
         if not self.alert_triggered:
             self.alert_triggered = True
             logging.warning(
-                f"High traffic generated an alert - hits = {average_events_per_second:.2f}/s, "
-                f"triggered at {current_time}\n"
+                "High traffic generated an alert - hits = %.2f/s, triggered at %s\n",
+                average_events_per_second,
+                current_time,
             )
             logging.debug(
-                f"window_size={self.window_size_seconds}s\n\tTotal events={len(self.window)}\n\t"
-                f"avg_events_per_second={average_events_per_second:.2f}\n\t"
-                f"More than {self.alert_threshold} events per second\n"
+                "window_size=%ss\n\tTotal events=%s\n\tavg_events_per_second=%.2f\n\t"
+                "More than %s events per second\n",
+                self.window_size_seconds,
+                len(self.window),
+                average_events_per_second,
+                self.alert_threshold,
             )
 
-    def resolve_alert(self, average_events_per_second, current_time):
+    def resolve_alert(self, average_events_per_second: float, current_time: int):
         if self.alert_triggered:
             self.alert_triggered = False
             logging.warning(
-                f"Reduced traffic resolved an alert - hits = {average_events_per_second:.2f}/s, "
-                f"resolved at {current_time}\n"
+                "Reduced traffic resolved an alert - hits = %.2f/s, resolved at %s\n",
+                average_events_per_second,
+                current_time,
             )
             logging.debug(
-                f"window_size={self.window_size_seconds}s\n\tTotal events={len(self.window)}\n\t"
-                f"avg_events_per_second={average_events_per_second}\n\t"
-                f"Fewer than {self.alert_threshold} events per second\n"
+                "window_size=%ss\n\tTotal events=%s\n\tavg_events_per_second=%.2f\n\t"
+                "Fewer than %s events per second\n",
+                self.window_size_seconds,
+                len(self.window),
+                average_events_per_second,
+                self.alert_threshold,
             )
 
 
@@ -196,7 +212,6 @@ def read_access_log(
             current_timestamp = int(event.get("date"))
             logging.debug(event)
             aggregate = AccessLogAggregate(0, current_timestamp, event)
-            logging.debug(aggregate)
             yield aggregate
 
 
