@@ -112,6 +112,7 @@ class AccessLogMonitor:
         self.events = events
         self.window = []
         self.alert_triggered = False
+        self.times_alert_triggered = 0
 
     def run(self):
         """Monitor the sequence of aggregates"""
@@ -147,7 +148,11 @@ class AccessLogMonitor:
 
         :param timestamp: The current time
         """
-        average_events_per_second = len(self.window) / (self.window_size_seconds or 1)
+        average_events_per_second = (
+            round(  # don't be quite so precise with the average calculation
+                len(self.window) / (self.window_size_seconds or 1), 1
+            )
+        )
         if average_events_per_second > self.alert_threshold:
             self.trigger_alert(average_events_per_second, timestamp)
             return True
@@ -158,6 +163,7 @@ class AccessLogMonitor:
     def trigger_alert(self, average_events_per_second: float, current_time: int):
         if not self.alert_triggered:
             self.alert_triggered = True
+            self.times_alert_triggered += 1
             logging.warning(
                 "High traffic generated an alert - hits = %.2f/s, triggered at %s\n",
                 average_events_per_second,
@@ -226,7 +232,6 @@ def read_access_log(
     with open(input_file, newline="") as csvfile:
         reader = csv.DictReader(csvfile, delimiter=",", quotechar='"')
         for event in reader:
-            logging.debug(event)
             if not is_valid(event):
                 logging.warning("Malformed log entry encountered: %s", event)
                 continue

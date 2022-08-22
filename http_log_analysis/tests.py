@@ -110,6 +110,32 @@ class HTTPLogAnalyzerUnitTests(unittest.TestCase):
             monitor.alert_triggered is False
         ), "Monitor evaluation on untriggered monitor not exceeding threshold should not trigger an alert"
 
+    def test_monitor_does_not_flap(self):
+        here = os.path.dirname(os.path.abspath(__file__))
+        events = read_access_log(os.path.join(here, "readme_sample_csv.txt"), 0)
+        events_between_flappy_timestamps = 0
+
+        def debugcounter(_events):
+            nonlocal events_between_flappy_timestamps
+            for event in _events:
+                # these are the earliest and latest timestamps of a range of the sample logfile in which the monitor
+                # alerts erroneously. This test confirms that the logfile contains an average of 10.008333 events that
+                # occur per second between these two particular timestamps.
+                # we want to make sure that the monitor only triggers twice for this entire file.
+                if event.bucket <= 1549574044 and event.bucket >= 1549573924:
+                    events_between_flappy_timestamps += 1
+                yield event
+
+        monitor = AccessLogMonitor(debugcounter(events), 120, 10.0)
+        for _ in monitor.run():
+            pass
+        assert (
+            events_between_flappy_timestamps == 1201
+        ), "Exactly 1201 events should have been counted in the given time range"
+        assert (
+            monitor.times_alert_triggered == 2
+        ), "Given this specific input file, the alert should trigger exactly twice."
+
     def test_aggregate_add(self):
         event = {
             "remotehost": "10.0.0.1",
