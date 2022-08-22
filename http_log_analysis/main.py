@@ -3,7 +3,7 @@ import csv
 import logging
 import time
 from collections import Counter, deque
-from typing import Generator
+from typing import Generator, Optional
 
 
 class AccessLogAggregate:
@@ -11,7 +11,7 @@ class AccessLogAggregate:
         self,
         bucket_size_seconds: int,
         bucket: int,
-        event: dict = None,
+        event: Optional[dict] = None,
     ):
         """Create an aggregate over a time-grouping of other AccessLogAggregates
 
@@ -22,17 +22,17 @@ class AccessLogAggregate:
         :param bucket: The epoch timestamp of the beginning of the time bucket represented by this aggregate
         :param event: An event that, if given, initializes analysis counters for the aggregate
         """
-        self.bucket_size_seconds: int = bucket_size_seconds
-        self.bucket: int = bucket
+        self.bucket_size_seconds = bucket_size_seconds
+        self.bucket = bucket
         # allow events to join this aggregate up to 30 seconds after its bucket has ended
         # accounts for out-of-order event arrival
-        self.latest_time_before_close: int = self.bucket + self.bucket_size_seconds + 30
-        self.top_sections: dict = Counter()
-        self.top_hosts: dict = Counter()
-        self.top_status_codes: dict = Counter()
-        self.availability: dict = Counter()
-        self.bytes: int = 0
-        self.is_closed: bool = False
+        self.latest_time_before_close = self.bucket + self.bucket_size_seconds + 30
+        self.top_sections = Counter()
+        self.top_hosts = Counter()
+        self.top_status_codes = Counter()
+        self.availability = Counter()
+        self.bytes = 0
+        self.is_closed = False
 
         if event is not None:
             self.bucket_size_seconds = 0
@@ -53,7 +53,7 @@ class AccessLogAggregate:
     def __repr__(self):
         return f"<AccessLogAggregate bucket={self.bucket} bucket_size_seconds={self.bucket_size_seconds}>"
 
-    def add(self, aggregate):
+    def add(self, aggregate: "AccessLogAggregate"):
         """Update analysis counters with information from the given aggregate"""
         # discard events for very old time windows that may appear due to out-of-order delivery
         if self.is_closed:
@@ -62,10 +62,15 @@ class AccessLogAggregate:
             )
             return
 
-        for attr in ("sections", "hosts", "status_codes"):
-            getattr(self, f"top_{attr}").update(
-                {key: count for key, count in getattr(aggregate, f"top_{attr}").items()}
-            )
+        self.top_sections.update(
+            {key: count for key, count in aggregate.top_sections.items()}
+        )
+        self.top_hosts.update(
+            {key: count for key, count in aggregate.top_hosts.items()}
+        )
+        self.top_status_codes.update(
+            {key: count for key, count in aggregate.top_status_codes.items()}
+        )
         self.availability.update(aggregate.availability)
         self.bytes += aggregate.bytes
 
@@ -227,7 +232,7 @@ def aggregate_stats(
     :param aggregates: The sequence over which to aggregate
     :param bucket_size_seconds: The size in seconds of the aggregation buckets to analyze
     """
-    all_aggregates: dict[int] = {}
+    all_aggregates: dict[int, AccessLogAggregate] = {}
     for agg in aggregates:
         bucket = agg.bucket - agg.bucket % bucket_size_seconds
 
