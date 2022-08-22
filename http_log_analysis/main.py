@@ -190,6 +190,26 @@ class AccessLogMonitor:
             )
 
 
+def is_valid(event: dict[str, str]) -> bool:
+    """Return a boolean indicating whether the given event dictionary adheres to the schema this program expects"""
+    if any(
+        event[key] is None
+        for key in (
+            "remotehost",
+            "rfc931",
+            "authuser",
+            "date",
+            "request",
+            "status",
+            "bytes",
+        )
+    ):
+        return False
+    if None in event:
+        return False
+    return True
+
+
 def read_access_log(
     input_file: str, timescale: float
 ) -> Generator[AccessLogAggregate, None, None]:
@@ -206,6 +226,10 @@ def read_access_log(
     with open(input_file, newline="") as csvfile:
         reader = csv.DictReader(csvfile, delimiter=",", quotechar='"')
         for event in reader:
+            logging.debug(event)
+            if not is_valid(event):
+                logging.warning("Malformed log entry encountered: %s", event)
+                continue
             time.sleep(
                 (
                     max(int(event.get("date")) - current_timestamp, 0)
@@ -215,7 +239,6 @@ def read_access_log(
                 * timescale
             )
             current_timestamp = int(event.get("date"))
-            logging.debug(event)
             aggregate = AccessLogAggregate(0, current_timestamp, event)
             yield aggregate
 

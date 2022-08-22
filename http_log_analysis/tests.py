@@ -56,6 +56,33 @@ class HTTPLogAnalyzerUnitTests(unittest.TestCase):
         assert result[0].is_closed is False
         assert result[0].latest_time_before_close > 0
 
+    def test_read_access_log_containing_malformed_lines_and_parse_event(self):
+        here = os.path.dirname(os.path.abspath(__file__))
+        result = list(
+            read_access_log(
+                os.path.join(here, "sample_csv_with_malformed_lines.txt"), 0
+            )
+        )
+        assert (
+            len(result) == 4830
+        ), "read_access_log should consume the entire log file, ignoring malformed lines"
+        assert isinstance(
+            result[0], AccessLogAggregate
+        ), "read_access_log should return a sequence of AccessLogAggregates"
+        assert result[0].bucket == 1549573860
+        assert (
+            result[0].bucket_size_seconds == 0
+        ), "Parsing step should return aggregates representing individual events"
+        assert result[0].top_sections == {"/api": 1}
+        assert result[0].top_hosts == {"10.0.0.2": 1}
+        assert result[0].top_status_codes == {"200": 1}
+        assert result[0].availability["total"] == 1
+        assert result[0].availability["successes"] == 1
+        assert result[0].availability["failures"] == 0
+        assert result[0].bytes == 1234
+        assert result[0].is_closed is False
+        assert result[0].latest_time_before_close > 0
+
     def test_aggregate_stats(self):
         result = list(aggregate_stats(self.events, 10))
         assert result == self.events
