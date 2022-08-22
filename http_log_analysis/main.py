@@ -95,7 +95,7 @@ class AccessLogMonitor:
         self,
         events: Generator[AccessLogAggregate, None, None],
         window_size_seconds: int,
-        threshold: int,
+        threshold: float,
     ):
         """Create a monitor over AccessLogAggregates based on a sliding window
 
@@ -164,7 +164,7 @@ class AccessLogMonitor:
                 current_time,
             )
             logging.debug(
-                "window_size=%ss\n\tTotal events=%s\n\tavg_events_per_second=%.2f\n\t"
+                "window_size=%ss\n\tTotal events=%s\n\tavg_events_per_second=%f\n\t"
                 "More than %s events per second\n",
                 self.window_size_seconds,
                 len(self.window),
@@ -181,7 +181,7 @@ class AccessLogMonitor:
                 current_time,
             )
             logging.debug(
-                "window_size=%ss\n\tTotal events=%s\n\tavg_events_per_second=%.2f\n\t"
+                "window_size=%ss\n\tTotal events=%s\n\tavg_events_per_second=%f\n\t"
                 "Fewer than %s events per second\n",
                 self.window_size_seconds,
                 len(self.window),
@@ -268,8 +268,8 @@ def parse_args():
     parser.add_argument(
         "--alert-threshold",
         "-a",
-        type=int,
-        default=10,
+        type=float,
+        default=10.0,
         help="Average requests per second during the monitoring window above which to alert. Defaults to 10.",
     )
     parser.add_argument(
