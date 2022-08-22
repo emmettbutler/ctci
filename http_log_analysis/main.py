@@ -221,6 +221,9 @@ def aggregate_stats(
 ) -> Generator:
     """Collect and report statistics on time-bucketed aggregates over the <aggregates> generator
 
+    This is a bare function as opposed to a class method because it doesn't have enough state to track
+    to warrant the extra level of encapsulation.
+
     :param aggregates: The sequence over which to aggregate
     :param bucket_size_seconds: The size in seconds of the aggregation buckets to analyze
     """
