@@ -1,4 +1,9 @@
+use std::error::Error;
+use std::fs;
+use std::io;
 use std::path::PathBuf;
+
+use csv;
 
 use clap::Parser;
 
@@ -31,7 +36,13 @@ struct Cli {
     verbose: u8,
 }
 
+fn read_access_log(input_file: PathBuf, timescale: f32) -> Result<(), Box<dyn Error>> {
+    let log_contents = fs::read_to_string(input_file)?;
+    let mut reader = csv::Reader::from_reader(io::stdin());
+    Ok(())
+}
+
 fn main() {
     let cli = Cli::parse();
-    dbg!(&cli);
+    read_access_log(cli.input_file, cli.timescale);
 }
