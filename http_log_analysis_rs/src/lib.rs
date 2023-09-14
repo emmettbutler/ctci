@@ -92,13 +92,8 @@ impl AccessLogMonitor {
     }
 
     fn update_window(&mut self, event: Rc<AccessLogAggregate>) {
-        /*self.window = self
-            .window
-            .iter()
-            .filter(|e| e.bucket >= event.bucket - self.min_window_size_seconds)
-            .collect();
-        */
-
+        self.window
+            .retain(|e| e.bucket < event.bucket - self.min_window_size_seconds);
         self.window.push(Rc::clone(&event));
 
         self.first_event_timestamp = cmp::min(self.window[0].bucket, event.bucket);
