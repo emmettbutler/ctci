@@ -12,22 +12,23 @@ struct Event {
     remotehost: String,
     rfc931: String,
     authuser: String,
-    date: u64,
+    date: i32,
     request: String,
     status: String,
     bytes: usize,
 }
 
+#[derive(Debug)]
 struct AccessLogAggregate {
     bucket_size_seconds: i32,
-    bucket: u64,
-    latest_time_before_close: u64,
+    bucket: i32,
+    latest_time_before_close: i32,
     bytes: usize,
     is_closed: bool,
 }
 
 impl AccessLogAggregate {
-    fn new(mut bucket_size_seconds: i32, bucket: u64, event: Option<&Event>) -> AccessLogAggregate {
+    fn new(mut bucket_size_seconds: i32, bucket: i32, event: Option<&Event>) -> AccessLogAggregate {
         let mut bytes = 0;
         if let Some(_event) = &event {
             bucket_size_seconds = 0;
@@ -36,7 +37,7 @@ impl AccessLogAggregate {
         AccessLogAggregate {
             bucket_size_seconds,
             bucket,
-            latest_time_before_close: bucket + bucket_size_seconds as u64 + 30,
+            latest_time_before_close: bucket + bucket_size_seconds + 30,
             bytes,
             is_closed: false,
         }
@@ -60,24 +61,24 @@ impl AccessLogAggregate {
 }
 
 struct AccessLogMonitor {
-    window_size_seconds: u64,
-    min_window_size_seconds: u64,
-    first_event_timestamp: u64,
-    last_event_timestamp: u64,
-    alert_threshold: u64,
+    window_size_seconds: i32,
+    min_window_size_seconds: i32,
+    first_event_timestamp: i32,
+    last_event_timestamp: i32,
+    alert_threshold: f32,
     alert_triggered: bool,
-    times_alert_triggered: u64,
+    times_alert_triggered: i32,
     window: Box<Vec<Rc<AccessLogAggregate>>>,
 }
 
 impl AccessLogMonitor {
-    fn new() -> AccessLogMonitor {
+    fn new(window_size_seconds: i32, threshold: f32) -> AccessLogMonitor {
         AccessLogMonitor {
-            window_size_seconds: 0,
-            min_window_size_seconds: 0,
+            window_size_seconds: 1,
+            min_window_size_seconds: window_size_seconds,
             first_event_timestamp: 0,
             last_event_timestamp: 0,
-            alert_threshold: 0,
+            alert_threshold: threshold,
             alert_triggered: false,
             times_alert_triggered: 0,
             window: Box::new(Vec::new()),
@@ -87,30 +88,66 @@ impl AccessLogMonitor {
     fn update(&mut self, aggregate: Rc<AccessLogAggregate>) {
         self.update_window(Rc::clone(&aggregate));
         if self.window_size_seconds >= self.min_window_size_seconds {
-            self.evaluate_alert_conditions(Rc::clone(&aggregate).bucket);
+            self.evaluate_alert_conditions((&aggregate).bucket);
         }
     }
 
     fn update_window(&mut self, event: Rc<AccessLogAggregate>) {
         self.window
-            .retain(|e| e.bucket < event.bucket - self.min_window_size_seconds);
+            .retain(|e| e.bucket >= event.bucket - self.min_window_size_seconds);
         self.window.push(Rc::clone(&event));
-
         self.first_event_timestamp = cmp::min(self.window[0].bucket, event.bucket);
         self.last_event_timestamp =
             cmp::max(self.window[self.window.len() - 1].bucket, event.bucket);
-        self.window_size_seconds = self.last_event_timestamp - self.first_event_timestamp
+        self.window_size_seconds = self.last_event_timestamp - self.first_event_timestamp;
     }
 
-    fn evaluate_alert_conditions(&self, bucket: u64) {}
+    fn evaluate_alert_conditions(&mut self, timestamp: i32) {
+        let mut average_events_per_second: f32 =
+            self.window.len() as f32 / self.window_size_seconds as f32;
+        average_events_per_second = (10.0 * average_events_per_second).round() / 10.0;
+        if average_events_per_second > self.alert_threshold {
+            self.trigger_alert(average_events_per_second, timestamp);
+        } else {
+            self.resolve_alert(average_events_per_second, timestamp);
+        }
+    }
+
+    fn trigger_alert(&mut self, average_events_per_second: f32, current_time: i32) {
+        if !self.alert_triggered {
+            self.alert_triggered = true;
+            self.times_alert_triggered += 1;
+            println!(
+                "High traffic generated an alert - hits = {}/s, triggered at {}\n",
+                average_events_per_second, current_time,
+            );
+            println!(
+                "window_size={}\n\tTotal events={}\n\tavg_events_per_second={}\n\tMore than {} events per second\n",
+                self.window_size_seconds,
+                self.window.len(),
+                average_events_per_second,
+                self.alert_threshold,
+            );
+        }
+    }
+
+    fn resolve_alert(&mut self, average_events_per_second: f32, current_time: i32) {
+        if self.alert_triggered {
+            self.alert_triggered = false;
+            println!(
+                "Reduced traffic resolved an alert - hits = {}/s, resolved at {}\n",
+                average_events_per_second, current_time,
+            );
+        }
+    }
 }
 
 fn update_stats(
     agg: &AccessLogAggregate,
-    all_aggregates: &mut HashMap<u64, Box<AccessLogAggregate>>,
+    all_aggregates: &mut HashMap<i32, Box<AccessLogAggregate>>,
     bucket_size_seconds: i32,
 ) {
-    let bucket = agg.bucket - agg.bucket % bucket_size_seconds as u64;
+    let bucket = agg.bucket - agg.bucket % bucket_size_seconds;
     if !all_aggregates.contains_key(&bucket) {
         all_aggregates.insert(
             bucket,
@@ -129,10 +166,16 @@ fn update_stats(
     }
 }
 
-pub fn process(reader: &mut csv::Reader<File>, timescale: f32, bucket_size_seconds: i32) {
-    let mut monitor = AccessLogMonitor::new();
-    let mut all_aggregates: HashMap<u64, Box<AccessLogAggregate>> = HashMap::new();
-    let mut current_timestamp: u64 = 0;
+pub fn process(
+    reader: &mut csv::Reader<File>,
+    timescale: f32,
+    bucket_size_seconds: i32,
+    alert_window: i32,
+    alert_threshold: f32,
+) {
+    let mut monitor = AccessLogMonitor::new(alert_window, alert_threshold);
+    let mut all_aggregates: HashMap<i32, Box<AccessLogAggregate>> = HashMap::new();
+    let mut current_timestamp: i32 = 0;
     for result in reader.deserialize::<Event>() {
         if let Err(why) = result {
             println!("Encountered malformed log line: {}", why);
@@ -149,8 +192,7 @@ pub fn process(reader: &mut csv::Reader<File>, timescale: f32, bucket_size_secon
     }
 }
 
-fn process_event(event: &Event, timescale: f32, current_timestamp: u64) -> AccessLogAggregate {
-    println!("{:?}", event);
+fn process_event(event: &Event, timescale: f32, current_timestamp: i32) -> AccessLogAggregate {
     let wait_dur: u64;
     match current_timestamp {
         0 => wait_dur = 0,
