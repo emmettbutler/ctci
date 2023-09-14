@@ -85,18 +85,27 @@ impl AccessLogMonitor {
 }
 
 fn update(
-    aggregate: &AccessLogAggregate,
+    agg: &AccessLogAggregate,
     all_aggregates: &mut HashMap<u64, Box<AccessLogAggregate>>,
     bucket_size_seconds: i32,
 ) {
-    let bucket = aggregate.bucket - aggregate.bucket % bucket_size_seconds as u64;
+    let bucket = agg.bucket - agg.bucket % bucket_size_seconds as u64;
     if !all_aggregates.contains_key(&bucket) {
         all_aggregates.insert(
             bucket,
             Box::new(AccessLogAggregate::new(bucket_size_seconds, bucket, None)),
         );
     }
-    all_aggregates.get_mut(&bucket).unwrap().add(aggregate);
+    all_aggregates.get_mut(&bucket).unwrap().add(agg);
+
+    for (_bucket, aggregate) in all_aggregates {
+        if !aggregate.is_closed
+            && agg.bucket > aggregate.latest_time_before_close
+            && aggregate.bucket_size_seconds != 0
+        {
+            aggregate.close();
+        }
+    }
 }
 
 pub fn process(reader: &mut csv::Reader<File>, timescale: f32, bucket_size_seconds: i32) {
@@ -110,6 +119,10 @@ pub fn process(reader: &mut csv::Reader<File>, timescale: f32, bucket_size_secon
             let aggregate = process_event(&event, timescale, current_timestamp);
             current_timestamp = event.date;
             update(&aggregate, &mut all_aggregates, bucket_size_seconds);
+            all_aggregates = all_aggregates
+                .into_iter()
+                .filter(|(_, agg)| !agg.is_closed)
+                .collect();
             monitor.check(&aggregate);
         }
     }
