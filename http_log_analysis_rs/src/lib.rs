@@ -1,38 +1,37 @@
 use std::error::Error;
-use std::path::PathBuf;
+use std::fs::File;
 use std::thread;
 use std::time;
 
-use csv;
 use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
-struct Event {
+pub struct Event {
     remotehost: String,
     rfc931: String,
     authuser: String,
-    date: u64,
+    pub date: u64,
     request: String,
     status: String,
     bytes: usize,
 }
 
-struct AccessLogAggregate {
-    bucket_size_seconds: u32,
-    bucket: u32,
-    latest_time_before_close: u32,
+pub struct AccessLogAggregate {
+    bucket_size_seconds: u64,
+    bucket: u64,
+    latest_time_before_close: u64,
     bytes: usize,
     is_closed: bool,
 }
 
 impl AccessLogAggregate {
     pub fn new(
-        mut bucket_size_seconds: u32,
-        bucket: u32,
-        event: Option<Event>,
+        mut bucket_size_seconds: u64,
+        bucket: u64,
+        event: Option<&Event>,
     ) -> AccessLogAggregate {
         let mut bytes = 0;
-        if let Some(_event) = event {
+        if let Some(_event) = &event {
             bucket_size_seconds = 0;
             bytes = _event.bytes;
         };
@@ -46,31 +45,32 @@ impl AccessLogAggregate {
     }
 }
 
-pub fn read_access_log(input_file: PathBuf, timescale: f32) -> Result<(), Box<dyn Error>> {
+pub fn process(reader: &mut csv::Reader<File>, timescale: f32) {
     let mut current_timestamp: u64 = 0;
-    let mut reader = csv::Reader::from_path(input_file)?;
     for result in reader.deserialize::<Event>() {
-        match result {
-            Err(why) => {
-                println!("Malformed log entry encountered: {}", why);
-                continue;
-            }
-            Ok(event) => {
-                println!("{:?}", event);
-                let wait_dur: u64;
-                match current_timestamp {
-                    0 => wait_dur = 0,
-                    _ => {
-                        wait_dur = (timescale
-                            * 1000_f32
-                            * event.date.saturating_sub(current_timestamp) as f32)
-                            as u64;
-                    }
-                }
-                thread::sleep(time::Duration::from_millis(wait_dur));
-                current_timestamp = event.date;
-            }
-        };
+        if let Err(why) = result {
+            println!("Encountered malformed log line: {}", why);
+        } else if let Ok(event) = result {
+            process_event(&event, timescale, current_timestamp);
+            current_timestamp = event.date;
+        }
     }
-    Ok(())
+}
+
+fn process_event(
+    event: &Event,
+    timescale: f32,
+    current_timestamp: u64,
+) -> Result<AccessLogAggregate, Box<dyn Error>> {
+    println!("{:?}", event);
+    let wait_dur: u64;
+    match current_timestamp {
+        0 => wait_dur = 0,
+        _ => {
+            wait_dur =
+                (timescale * 1000_f32 * event.date.saturating_sub(current_timestamp) as f32) as u64;
+        }
+    }
+    thread::sleep(time::Duration::from_millis(wait_dur));
+    Ok(AccessLogAggregate::new(0, current_timestamp, Some(&event)))
 }
