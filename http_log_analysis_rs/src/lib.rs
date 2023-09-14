@@ -28,6 +28,17 @@ struct AccessLogAggregate {
 }
 
 impl AccessLogAggregate {
+    /// Create an aggregate over a time-grouping of other AccessLogAggregates
+    ///
+    /// An AccessLogAggregate can represent one or more log events. When it represents only one event,
+    /// self.bucket_size_seconds is 0.
+    ///
+    /// # Arguments
+    ///
+    /// * `bucket_size_seconds` - The size of the time bucket represented by this aggregate
+    /// * `bucket` - The epoch timestamp of the beginning of the time bucket represented by this aggregate
+    /// * `event` - An event that, if given, initializes analysis counters for the aggregate
+    ///
     fn new(mut bucket_size_seconds: i32, bucket: i32, event: Option<&Event>) -> AccessLogAggregate {
         let mut bytes = 0;
         if let Some(_event) = &event {
@@ -43,6 +54,7 @@ impl AccessLogAggregate {
         }
     }
 
+    /// Update analysis counters with information from the given aggregate
     fn add(&mut self, aggregate: &AccessLogAggregate) {
         if self.is_closed {
             return;
@@ -50,6 +62,7 @@ impl AccessLogAggregate {
         self.bytes += aggregate.bytes;
     }
 
+    /// Mark this aggregate as closed and log its collected stats
     fn close(&mut self) {
         // XXX print more stats computation here
         println!(
@@ -72,6 +85,12 @@ struct AccessLogMonitor {
 }
 
 impl AccessLogMonitor {
+    /// Create a monitor over AccessLogAggregates based on a sliding window
+    ///
+    /// # Arguments
+    ///
+    /// * `window_size_seconds` - The size of the sliding window used for analysis, in seconds
+    /// * `threshold` - The number of events per second on average over the monitoring window that will cause an alert
     fn new(window_size_seconds: i32, threshold: f32) -> AccessLogMonitor {
         AccessLogMonitor {
             window_size_seconds: 1,
@@ -92,6 +111,10 @@ impl AccessLogMonitor {
         }
     }
 
+    /// Add the given event to the analysis window
+    ///
+    /// Maintains a sliding window by expelling old events as new ones are added
+    /// Tracks the size of the window in seconds
     fn update_window(&mut self, event: Rc<AccessLogAggregate>) {
         self.window
             .retain(|e| e.bucket >= event.bucket - self.min_window_size_seconds);
@@ -102,6 +125,11 @@ impl AccessLogMonitor {
         self.window_size_seconds = self.last_event_timestamp - self.first_event_timestamp;
     }
 
+    /// Check the alert conditions and trigger alerts if applicable
+    ///
+    /// # Arguments
+    ///
+    /// * `timestamp` - The current time
     fn evaluate_alert_conditions(&mut self, timestamp: i32) {
         let mut average_events_per_second: f32 =
             self.window.len() as f32 / self.window_size_seconds as f32;
@@ -142,6 +170,15 @@ impl AccessLogMonitor {
     }
 }
 
+/// Collect and report statistics on time-bucketed aggregates over the <aggregates> generator
+///
+/// This is a bare function as opposed to a class method because it doesn't have enough state to track
+/// to warrant the extra level of encapsulation.
+///
+/// # Arguments
+///
+/// * `aggregates` - The sequence over which to aggregate
+/// * `bucket_size_seconds` - The size in seconds of the aggregation buckets to analyze
 fn update_stats(
     agg: &AccessLogAggregate,
     all_aggregates: &mut HashMap<i32, Box<AccessLogAggregate>>,
@@ -166,6 +203,7 @@ fn update_stats(
     }
 }
 
+/// Generates AccessLogAggregates from a CSV reader
 pub fn process(
     reader: &mut csv::Reader<File>,
     timescale: f32,
@@ -192,6 +230,15 @@ pub fn process(
     }
 }
 
+/// Build an `AccessLogAggregate` from the given `Event`
+///
+/// Simulates delayed event arrival with time.sleep.
+///
+/// # Arguments
+///
+/// * `timescale` - A multiplier applied to the sleep time between events. The sleep time defaults to the difference
+///    between the each pair of event timestamps in the log.
+/// * `current_timestamp` - The timestamp of the previously processed event
 fn process_event(event: &Event, timescale: f32, current_timestamp: i32) -> AccessLogAggregate {
     let wait_dur: u64;
     match current_timestamp {
