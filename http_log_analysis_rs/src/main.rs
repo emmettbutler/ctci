@@ -1,5 +1,8 @@
+use std::cmp;
 use std::error::Error;
 use std::path::PathBuf;
+use std::thread;
+use std::time;
 
 use clap::Parser;
 use csv;
@@ -10,7 +13,7 @@ struct Event {
     remotehost: String,
     rfc931: String,
     authuser: String,
-    date: String,
+    date: u64,
     request: String,
     status: String,
     bytes: String,
@@ -46,11 +49,29 @@ struct Cli {
 }
 
 fn read_access_log(input_file: PathBuf, timescale: f32) -> Result<(), Box<dyn Error>> {
+    let mut current_timestamp: u64 = 0;
     let mut reader = csv::Reader::from_path(input_file)?;
     for result in reader.deserialize::<Event>() {
         match result {
-            Ok(value) => println!("{:?}", value),
-            Err(_) => continue,
+            Err(why) => {
+                println!("Malformed log entry encountered: {}", why);
+                continue;
+            }
+            Ok(event) => {
+                println!("{:?}", event);
+                let wait_dur: u64;
+                match current_timestamp {
+                    0 => wait_dur = 0,
+                    _ => {
+                        wait_dur = (timescale
+                            * 1000_f32
+                            * event.date.saturating_sub(current_timestamp) as f32)
+                            as u64;
+                    }
+                }
+                thread::sleep(time::Duration::from_millis(wait_dur));
+                current_timestamp = event.date;
+            }
         };
     }
     Ok(())
