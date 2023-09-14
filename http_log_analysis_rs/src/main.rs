@@ -1,11 +1,20 @@
 use std::error::Error;
-use std::fs;
-use std::io;
 use std::path::PathBuf;
 
-use csv;
-
 use clap::Parser;
+use csv;
+use serde::Deserialize;
+
+#[derive(Debug, Deserialize)]
+struct Event {
+    remotehost: String,
+    rfc931: String,
+    authuser: String,
+    date: String,
+    request: String,
+    status: String,
+    bytes: String,
+}
 
 #[derive(Debug, Parser)]
 #[clap(author, version, about = "Monitor and analyze a CSV HTTP access log.")]
@@ -37,12 +46,20 @@ struct Cli {
 }
 
 fn read_access_log(input_file: PathBuf, timescale: f32) -> Result<(), Box<dyn Error>> {
-    let log_contents = fs::read_to_string(input_file)?;
-    let mut reader = csv::Reader::from_reader(io::stdin());
+    let mut reader = csv::Reader::from_path(input_file)?;
+    for result in reader.deserialize::<Event>() {
+        match result {
+            Ok(value) => println!("{:?}", value),
+            Err(_) => continue,
+        };
+    }
     Ok(())
 }
 
 fn main() {
     let cli = Cli::parse();
-    read_access_log(cli.input_file, cli.timescale);
+    match read_access_log(cli.input_file, cli.timescale) {
+        Ok(_) => println!("success"),
+        Err(e) => println!("{}", e),
+    };
 }
