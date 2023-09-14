@@ -38,6 +38,8 @@ fn main() {
     let reader = csv::Reader::from_path(cli.input_file);
     match reader {
         Err(why) => panic!("Failed to create CSV reader: {}", why),
-        Ok(mut _reader) => http_log_analysis_rs::process(&mut _reader, cli.timescale),
+        Ok(mut _reader) => {
+            http_log_analysis_rs::process(&mut _reader, cli.timescale, cli.analysis_bucket_size)
+        }
     };
 }

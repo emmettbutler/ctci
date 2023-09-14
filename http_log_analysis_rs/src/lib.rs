@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::fs::File;
 use std::thread;
 use std::time;
@@ -5,18 +6,18 @@ use std::time;
 use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
-pub struct Event {
+struct Event {
     remotehost: String,
     rfc931: String,
     authuser: String,
-    pub date: u64,
+    date: u64,
     request: String,
     status: String,
     bytes: usize,
 }
 
-pub struct AccessLogAggregate {
-    bucket_size_seconds: u64,
+struct AccessLogAggregate {
+    bucket_size_seconds: i32,
     bucket: u64,
     latest_time_before_close: u64,
     bytes: usize,
@@ -24,11 +25,7 @@ pub struct AccessLogAggregate {
 }
 
 impl AccessLogAggregate {
-    pub fn new(
-        mut bucket_size_seconds: u64,
-        bucket: u64,
-        event: Option<&Event>,
-    ) -> AccessLogAggregate {
+    fn new(mut bucket_size_seconds: i32, bucket: u64, event: Option<&Event>) -> AccessLogAggregate {
         let mut bytes = 0;
         if let Some(_event) = &event {
             bucket_size_seconds = 0;
@@ -37,10 +34,25 @@ impl AccessLogAggregate {
         AccessLogAggregate {
             bucket_size_seconds,
             bucket,
-            latest_time_before_close: bucket + bucket_size_seconds + 30,
+            latest_time_before_close: bucket + bucket_size_seconds as u64 + 30,
             bytes,
             is_closed: false,
         }
+    }
+
+    fn add(&mut self, aggregate: &AccessLogAggregate) {
+        if self.is_closed {
+            return;
+        }
+        self.bytes += aggregate.bytes;
+    }
+
+    fn close(&mut self) {
+        println!(
+            "Bucket={}\n\tBucket size={}\n\tBytes={}\n",
+            self.bucket, self.bucket_size_seconds, self.bytes,
+        );
+        self.is_closed = true;
     }
 }
 
@@ -56,7 +68,7 @@ struct AccessLogMonitor {
 }
 
 impl AccessLogMonitor {
-    pub fn new() -> AccessLogMonitor {
+    fn new() -> AccessLogMonitor {
         AccessLogMonitor {
             window_size_seconds: 0,
             min_window_size_seconds: 0,
@@ -69,13 +81,27 @@ impl AccessLogMonitor {
         }
     }
 
-    pub fn check(&self, aggregate: &AccessLogAggregate) {}
+    fn check(&self, aggregate: &AccessLogAggregate) {}
 }
 
-fn update(aggregate: &AccessLogAggregate) {}
+fn update(
+    aggregate: &AccessLogAggregate,
+    all_aggregates: &mut HashMap<u64, Box<AccessLogAggregate>>,
+    bucket_size_seconds: i32,
+) {
+    let bucket = aggregate.bucket - aggregate.bucket % bucket_size_seconds as u64;
+    if !all_aggregates.contains_key(&bucket) {
+        all_aggregates.insert(
+            bucket,
+            Box::new(AccessLogAggregate::new(bucket_size_seconds, bucket, None)),
+        );
+    }
+    all_aggregates.get_mut(&bucket).unwrap().add(aggregate);
+}
 
-pub fn process(reader: &mut csv::Reader<File>, timescale: f32) {
+pub fn process(reader: &mut csv::Reader<File>, timescale: f32, bucket_size_seconds: i32) {
     let monitor = AccessLogMonitor::new();
+    let mut all_aggregates: HashMap<u64, Box<AccessLogAggregate>> = HashMap::new();
     let mut current_timestamp: u64 = 0;
     for result in reader.deserialize::<Event>() {
         if let Err(why) = result {
@@ -83,7 +109,7 @@ pub fn process(reader: &mut csv::Reader<File>, timescale: f32) {
         } else if let Ok(event) = result {
             let aggregate = process_event(&event, timescale, current_timestamp);
             current_timestamp = event.date;
-            update(&aggregate);
+            update(&aggregate, &mut all_aggregates, bucket_size_seconds);
             monitor.check(&aggregate);
         }
     }
