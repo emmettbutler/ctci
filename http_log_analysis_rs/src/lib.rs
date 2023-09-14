@@ -1,5 +1,7 @@
+use std::cmp;
 use std::collections::HashMap;
 use std::fs::File;
+use std::rc::Rc;
 use std::thread;
 use std::time;
 
@@ -48,6 +50,7 @@ impl AccessLogAggregate {
     }
 
     fn close(&mut self) {
+        // XXX print more stats computation here
         println!(
             "Bucket={}\n\tBucket size={}\n\tBytes={}\n",
             self.bucket, self.bucket_size_seconds, self.bytes,
@@ -64,7 +67,7 @@ struct AccessLogMonitor {
     alert_threshold: u64,
     alert_triggered: bool,
     times_alert_triggered: u64,
-    window: Box<Vec<Event>>,
+    window: Box<Vec<Rc<AccessLogAggregate>>>,
 }
 
 impl AccessLogMonitor {
@@ -81,10 +84,33 @@ impl AccessLogMonitor {
         }
     }
 
-    fn check(&self, aggregate: &AccessLogAggregate) {}
+    fn update(&mut self, aggregate: Rc<AccessLogAggregate>) {
+        self.update_window(Rc::clone(&aggregate));
+        if self.window_size_seconds >= self.min_window_size_seconds {
+            self.evaluate_alert_conditions(Rc::clone(&aggregate).bucket);
+        }
+    }
+
+    fn update_window(&mut self, event: Rc<AccessLogAggregate>) {
+        /*self.window = self
+            .window
+            .iter()
+            .filter(|e| e.bucket >= event.bucket - self.min_window_size_seconds)
+            .collect();
+        */
+
+        self.window.push(Rc::clone(&event));
+
+        self.first_event_timestamp = cmp::min(self.window[0].bucket, event.bucket);
+        self.last_event_timestamp =
+            cmp::max(self.window[self.window.len() - 1].bucket, event.bucket);
+        self.window_size_seconds = self.last_event_timestamp - self.first_event_timestamp
+    }
+
+    fn evaluate_alert_conditions(&self, bucket: u64) {}
 }
 
-fn update(
+fn update_stats(
     agg: &AccessLogAggregate,
     all_aggregates: &mut HashMap<u64, Box<AccessLogAggregate>>,
     bucket_size_seconds: i32,
@@ -109,7 +135,7 @@ fn update(
 }
 
 pub fn process(reader: &mut csv::Reader<File>, timescale: f32, bucket_size_seconds: i32) {
-    let monitor = AccessLogMonitor::new();
+    let mut monitor = AccessLogMonitor::new();
     let mut all_aggregates: HashMap<u64, Box<AccessLogAggregate>> = HashMap::new();
     let mut current_timestamp: u64 = 0;
     for result in reader.deserialize::<Event>() {
@@ -118,12 +144,12 @@ pub fn process(reader: &mut csv::Reader<File>, timescale: f32, bucket_size_secon
         } else if let Ok(event) = result {
             let aggregate = process_event(&event, timescale, current_timestamp);
             current_timestamp = event.date;
-            update(&aggregate, &mut all_aggregates, bucket_size_seconds);
+            update_stats(&aggregate, &mut all_aggregates, bucket_size_seconds);
             all_aggregates = all_aggregates
                 .into_iter()
                 .filter(|(_, agg)| !agg.is_closed)
                 .collect();
-            monitor.check(&aggregate);
+            monitor.update(Rc::new(aggregate));
         }
     }
 }
