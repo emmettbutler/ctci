@@ -1,4 +1,3 @@
-use std::error::Error;
 use std::fs::File;
 use std::thread;
 use std::time;
@@ -45,23 +44,52 @@ impl AccessLogAggregate {
     }
 }
 
+struct AccessLogMonitor {
+    window_size_seconds: u64,
+    min_window_size_seconds: u64,
+    first_event_timestamp: u64,
+    last_event_timestamp: u64,
+    alert_threshold: u64,
+    alert_triggered: bool,
+    times_alert_triggered: u64,
+    window: Box<Vec<Event>>,
+}
+
+impl AccessLogMonitor {
+    pub fn new() -> AccessLogMonitor {
+        AccessLogMonitor {
+            window_size_seconds: 0,
+            min_window_size_seconds: 0,
+            first_event_timestamp: 0,
+            last_event_timestamp: 0,
+            alert_threshold: 0,
+            alert_triggered: false,
+            times_alert_triggered: 0,
+            window: Box::new(Vec::new()),
+        }
+    }
+
+    pub fn check(&self, aggregate: &AccessLogAggregate) {}
+}
+
+fn update(aggregate: &AccessLogAggregate) {}
+
 pub fn process(reader: &mut csv::Reader<File>, timescale: f32) {
+    let monitor = AccessLogMonitor::new();
     let mut current_timestamp: u64 = 0;
     for result in reader.deserialize::<Event>() {
         if let Err(why) = result {
             println!("Encountered malformed log line: {}", why);
         } else if let Ok(event) = result {
-            process_event(&event, timescale, current_timestamp);
+            let aggregate = process_event(&event, timescale, current_timestamp);
             current_timestamp = event.date;
+            update(&aggregate);
+            monitor.check(&aggregate);
         }
     }
 }
 
-fn process_event(
-    event: &Event,
-    timescale: f32,
-    current_timestamp: u64,
-) -> Result<AccessLogAggregate, Box<dyn Error>> {
+fn process_event(event: &Event, timescale: f32, current_timestamp: u64) -> AccessLogAggregate {
     println!("{:?}", event);
     let wait_dur: u64;
     match current_timestamp {
@@ -72,5 +100,5 @@ fn process_event(
         }
     }
     thread::sleep(time::Duration::from_millis(wait_dur));
-    Ok(AccessLogAggregate::new(0, current_timestamp, Some(&event)))
+    AccessLogAggregate::new(0, current_timestamp, Some(&event))
 }

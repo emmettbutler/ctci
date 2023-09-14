@@ -3,7 +3,6 @@ use std::path::PathBuf;
 use clap::Parser;
 
 use http_log_analysis_rs;
-use http_log_analysis_rs::Event;
 
 #[derive(Debug, Parser)]
 #[clap(author, version, about = "Monitor and analyze a CSV HTTP access log.")]
@@ -38,7 +37,7 @@ fn main() {
     let cli = Cli::parse();
     let reader = csv::Reader::from_path(cli.input_file);
     match reader {
-        Err(why) => panic!("Failed to create CSV reader"),
+        Err(why) => panic!("Failed to create CSV reader: {}", why),
         Ok(mut _reader) => http_log_analysis_rs::process(&mut _reader, cli.timescale),
     };
 }
