@@ -8,28 +8,35 @@ currencies = [
     ["ABC", "CND", "44"],
 ]
 
+INDEX = None
 
-def convert(
-    from_curr: str, to_curr: str, currencies: list[list[str]]
-) -> Optional[float]:
-    keyed = defaultdict(list)
+
+def _build_index(
+    currencies: list[list[str]],
+) -> dict[str, list[tuple[str, str, float]]]:
+    global INDEX
+    if INDEX:
+        return INDEX
+    INDEX = defaultdict(list)
     for f, t, r in currencies:
         r = float(r)
-        keyed[f].append((f, t, r))
-        keyed[t].append((t, f, 1 / r))
-    iter = from_curr
+        INDEX[f].append((f, t, r))
+        INDEX[t].append((t, f, 1 / r))
+    return INDEX
+
+
+def convert(iter: str, to_curr: str, currencies: list[list[str]]) -> Optional[float]:
+    keyed = _build_index(currencies)
     final_rate = 1
     seen = set((iter,))
-    while iter != to_curr:
-        if iter not in keyed:
-            return
-        for link in keyed[iter]:
-            if link[1] not in seen:
-                iter = link[1]
+    while iter != to_curr and iter in keyed:
+        for _, link, r_mul in keyed[iter]:
+            if link not in seen:
+                iter = link
                 seen.add(iter)
-                final_rate *= link[2]
+                final_rate *= r_mul
                 break
-    return final_rate
+    return final_rate if iter in keyed else None
 
 
 assert convert("USD", "GBP", currencies) == 10
