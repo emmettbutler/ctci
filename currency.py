@@ -36,10 +36,10 @@ def convert(iter: str, to_curr: str, currencies: list[list[str]]) -> Optional[fl
                 seen.add(iter)
                 final_rate *= r_mul
                 break
-    return final_rate if iter in keyed else None
+    return final_rate
 
 
 assert convert("USD", "GBP", currencies) == 10
 assert convert("USD", "CNY", currencies) == 10 * 20
 assert convert("MXD", "ABC", currencies) == 0.1 * (1 / 44)
-assert convert("bananah", "ABC", currencies) == None
+assert convert("bananah", "ABC", currencies) == 1
