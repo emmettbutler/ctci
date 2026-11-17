@@ -1,20 +1,41 @@
+# autoscaling/v2: the stable HPA API that supports the `metrics` list below.
 apiVersion: autoscaling/v2
+# Adds and removes Deployment replicas based on observed load.
 kind: HorizontalPodAutoscaler
+# Identifying information for the HPA.
 metadata:
+  # Same name as the Deployment it scales.
   name: dnsquery
+  # Labels on the HPA itself.
   labels:
+    # Standard recommended app-name label, used consistently across all manifests.
     app.kubernetes.io/name: dnsquery
+# Desired state of the HPA.
 spec:
+  # The workload to scale.
   scaleTargetRef:
+    # API group/version of the target.
     apiVersion: apps/v1
+    # The target is a Deployment.
     kind: Deployment
+    # The Deployment defined in deployment.yaml.
     name: dnsquery
+  # Never go below 2, matching the Deployment's replicas, so one pod can fail
+  # or be drained (see pdb.yaml) without an outage.
   minReplicas: 2
+  # Upper bound on cost if load spikes.
   maxReplicas: 10
+  # Signals the HPA scales on.
   metrics:
+    # A per-pod resource metric from metrics-server (it must be installed).
     - type: Resource
+      # Which resource to watch.
       resource:
+        # Scale on CPU; the service is a stateless request handler, so CPU tracks load.
         name: cpu
+        # The value to hold the metric at.
         target:
+          # Measured as a percentage of the pod's CPU request (50m in deployment.yaml).
           type: Utilization
+          # Scale out above 70% of the request, leaving headroom while new pods start.
           averageUtilization: 70

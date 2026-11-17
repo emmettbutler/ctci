@@ -1,6 +1,14 @@
+# adapted from https://github.com/stefanprodan/podinfo/tree/master/kustomize
+# Core API group, v1: the stable version for Namespace objects.
 apiVersion: v1
+# A Namespace isolates this app's resources from everything else in the cluster.
 kind: Namespace
+# Identifying information for the Namespace.
 metadata:
+  # Matches the `namespace:` field in kustomization.yaml, which places every other resource here.
   name: dnsquery
+  # Labels the Pod Security admission controller reads.
   labels:
+    # Reject any pod that doesn't meet the "restricted" Pod Security Standard;
+    # deployment.yaml's securityContext is written to satisfy it.
     pod-security.kubernetes.io/enforce: restricted

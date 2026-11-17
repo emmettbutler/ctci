@@ -1,72 +1,146 @@
+# apps/v1: the stable API group for Deployments.
 apiVersion: apps/v1
+# A Deployment manages a ReplicaSet of identical, stateless pods and rolls out updates.
 kind: Deployment
+# Identifying information for the Deployment.
 metadata:
+  # Referenced by hpa.yaml's scaleTargetRef.
   name: dnsquery
+  # Labels on the Deployment itself.
   labels:
+    # Standard recommended app-name label, used consistently across all manifests.
     app.kubernetes.io/name: dnsquery
+# Desired state of the Deployment.
 spec:
+  # Two pods so one can fail or be replaced without downtime. The HPA overrides
+  # this at runtime, with the same minimum.
   replicas: 2
+  # Keep 5 old ReplicaSets for `kubectl rollout undo` instead of the default 10, to reduce clutter.
   revisionHistoryLimit: 5
+  # How the Deployment finds the pods it owns. Immutable after creation.
   selector:
+    # Must match the pod template labels below.
     matchLabels:
+      # Selects the dnsquery pods.
       app.kubernetes.io/name: dnsquery
+  # How pods are replaced when the template changes.
   strategy:
+    # Replace pods gradually instead of deleting them all first (Recreate).
     type: RollingUpdate
+    # Rolling update tuning.
     rollingUpdate:
+      # Never drop below the desired count during a rollout, so capacity is never reduced.
       maxUnavailable: 0
+      # Add one new pod at a time; required to be >0 when maxUnavailable is 0.
       maxSurge: 1
+  # The pod template every replica is created from.
   template:
+    # Metadata stamped onto each pod.
     metadata:
+      # Pod labels.
       labels:
+        # Matched by the Deployment selector, Service, PDB and topology spread constraint.
         app.kubernetes.io/name: dnsquery
+    # Pod spec.
     spec:
+      # The server never calls the Kubernetes API, so don't give it a token to steal.
       automountServiceAccountToken: false
       # Main shuts down gracefully within 10s of SIGTERM.
+      # 20s gives that 10s drain plus margin before the kubelet sends SIGKILL.
       terminationGracePeriodSeconds: 20
+      # Pod-level security settings, required by the "restricted" Pod Security Standard.
       securityContext:
+        # Refuse to start the container if it would run as UID 0.
         runAsNonRoot: true
+        # 65532 is the distroless "nonroot" user the Dockerfile runs as.
         runAsUser: 65532
+        # Matching nonroot group.
         runAsGroup: 65532
+        # Restricts the system calls the container can make.
         seccompProfile:
+          # Use the container runtime's default seccomp filter (required by "restricted").
           type: RuntimeDefault
+      # Spread replicas across nodes so a single node failure doesn't take out every pod.
       topologySpreadConstraints:
+        # Pod counts per node may differ by at most one.
         - maxSkew: 1
+          # Spread across nodes (each node has a unique hostname label).
           topologyKey: kubernetes.io/hostname
+          # Best effort: still schedule on a single-node cluster such as minikube.
           whenUnsatisfiable: ScheduleAnyway
+          # Which pods are counted when computing the skew.
           labelSelector:
+            # Count only dnsquery pods.
             matchLabels:
+              # Same label as the pod template.
               app.kubernetes.io/name: dnsquery
+      # The pod's containers.
       containers:
+        # Container name, used in `kubectl logs -c` and in events.
         - name: dnsquery
+          # Image built from the Dockerfile; kustomization.yaml rewrites the tag.
           image: dnsquery:latest
+          # Use the local image loaded with `minikube image load` instead of always
+          # pulling (with a :latest tag the default would be Always).
           imagePullPolicy: IfNotPresent
+          # Environment variables.
           env:
+            # main.go reads ADDR for the listen address.
             - name: ADDR
+              # Listen on all interfaces, port 8080: unprivileged, so no root or NET_BIND_SERVICE needed.
               value: ":8080"
+          # Ports the container listens on (informational, but lets other objects refer to them by name).
           ports:
+            # Named so the Service and probes can refer to "http" instead of the number.
             - name: http
+              # Must match ADDR above and EXPOSE in the Dockerfile.
               containerPort: 8080
+              # HTTP runs over TCP.
               protocol: TCP
+          # Decides whether the pod receives Service traffic.
           readinessProbe:
+            # Probe with an HTTP GET; any 2xx/3xx counts as success.
             httpGet:
+              # Cheap handler that main.go leaves out of the access log.
               path: /healthz
+              # The named container port.
               port: http
+            # Check often so pods are added to or removed from the Service quickly.
             periodSeconds: 5
+            # Two misses (~10s) before the pod is taken out of rotation, to ignore single blips.
             failureThreshold: 2
+          # Decides whether the kubelet restarts the container.
           livenessProbe:
+            # Same endpoint as readiness.
             httpGet:
+              # Cheap handler that main.go leaves out of the access log.
               path: /healthz
+              # The named container port.
               port: http
+            # Checked less often than readiness; restarts are a bigger step than removing from rotation.
             periodSeconds: 10
+            # Three misses (~30s) before a restart, so a briefly slow pod isn't killed.
             failureThreshold: 3
+          # Resource requests (scheduling and HPA baseline) and limits (hard caps).
           resources:
+            # What the scheduler reserves for the pod.
             requests:
+              # A small Go HTTP server needs little CPU; also the baseline for the HPA's 70% target.
               cpu: 50m
+              # Roughly the working set of a small Go server.
               memory: 32Mi
+            # Hard caps.
             limits:
+              # OOM-kill a leaking pod instead of letting it starve the node. No CPU
+              # limit is set, to avoid CFS throttling; the CPU request still guarantees a share.
               memory: 128Mi
+          # Container-level security settings, required by the "restricted" Pod Security Standard.
           securityContext:
+            # Block setuid binaries and similar from gaining more privileges than the process started with.
             allowPrivilegeEscalation: false
+            # The server writes nothing to disk (logs go to stdout), so the filesystem can be read-only.
             readOnlyRootFilesystem: true
+            # Linux capabilities.
             capabilities:
+              # Drop them all; binding to 8080 needs none.
               drop: ["ALL"]

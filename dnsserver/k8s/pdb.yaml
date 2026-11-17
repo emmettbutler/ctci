@@ -1,11 +1,23 @@
+# policy/v1: the stable PodDisruptionBudget API (v1beta1 was removed in Kubernetes 1.25).
 apiVersion: policy/v1
+# Limits how many pods voluntary disruptions (node drains, upgrades) may evict at once.
 kind: PodDisruptionBudget
+# Identifying information for the PDB.
 metadata:
+  # Same name as the Deployment it protects.
   name: dnsquery
+  # Labels on the PDB itself.
   labels:
+    # Standard recommended app-name label, used consistently across all manifests.
     app.kubernetes.io/name: dnsquery
+# Desired state of the PDB.
 spec:
+  # Keep at least one pod serving during a drain. With 2+ replicas a drain can
+  # still proceed, evicting one pod at a time.
   minAvailable: 1
+  # Which pods the budget applies to.
   selector:
+    # Must match the pod template labels in deployment.yaml.
     matchLabels:
+      # Selects the dnsquery pods.
       app.kubernetes.io/name: dnsquery

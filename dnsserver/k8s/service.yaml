@@ -1,15 +1,30 @@
+# Core API group, v1: the stable version for Service objects.
 apiVersion: v1
+# A Service gives the pods one stable virtual IP and DNS name.
 kind: Service
+# Identifying information for the Service.
 metadata:
+  # Becomes the in-cluster DNS name dnsquery.dnsquery.svc; also the target of `port-forward svc/dnsquery`.
   name: dnsquery
+  # Labels on the Service itself, so `-l` queries find it alongside the other resources.
   labels:
+    # Standard recommended app-name label, used consistently across all manifests.
     app.kubernetes.io/name: dnsquery
+# Desired state of the Service.
 spec:
+  # Reachable only inside the cluster; outside access goes through port-forward or an Ingress.
   type: ClusterIP
+  # Which pods receive traffic.
   selector:
+    # Must match the pod template labels in deployment.yaml.
     app.kubernetes.io/name: dnsquery
+  # Ports the Service exposes.
   ports:
+    # Named so other objects can refer to it by name instead of number.
     - name: http
+      # Callers use the conventional HTTP port and don't need to know the container port.
       port: 80
+      # Refers to the container port by name ("http" = 8080), so the number lives in one place.
       targetPort: http
+      # HTTP runs over TCP.
       protocol: TCP
